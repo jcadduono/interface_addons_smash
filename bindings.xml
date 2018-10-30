@@ -1,0 +1,23 @@
+<Bindings>
+	<Binding name="Toggle Targets +" header="SMASH" category="ADDONS">
+		Smash_ToggleTargetMode()
+	</Binding>
+	<Binding name="Toggle Targets -" category="ADDONS">
+		Smash_ToggleTargetModeReverse()
+	</Binding>
+	<Binding name="Set Targets to 1" category="ADDONS">
+		Smash_SetTargetMode(1)
+	</Binding>
+	<Binding name="Set Targets to 2" category="ADDONS">
+		Smash_SetTargetMode(2)
+	</Binding>
+	<Binding name="Set Targets to 3" category="ADDONS">
+		Smash_SetTargetMode(3)
+	</Binding>
+	<Binding name="Set Targets to 4" category="ADDONS">
+		Smash_SetTargetMode(4)
+	</Binding>
+	<Binding name="Set Targets to 5+" category="ADDONS">
+		Smash_SetTargetMode(5)
+	</Binding>
+</Bindings>

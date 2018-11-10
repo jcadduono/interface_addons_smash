@@ -419,10 +419,7 @@ function Ability:stack()
 end
 
 function Ability:cost()
-	if self.rage_cost then
-		return self.rage_cost > 0 and (self.rage_cost / 100 * var.rage_max) or 0
-	end
-	return self.rage_cost > 0 and (self.rage_cost / 100 * var.rage_max) or 0
+	return self.rage_cost
 end
 
 function Ability:charges()
@@ -572,23 +569,101 @@ end
 
 -- Warrior Abilities
 ---- Multiple Specializations
+local BerserkerRage = Ability.add(18499, true, true)
+BerserkerRage.buff_duration = 6
+BerserkerRage.cooldown_duration = 60
 local Charge = Ability.add(100, false, true)
 Charge.cooldown_duration = 20
 Charge.rage_cost = -20
+Charge.requires_charge = true
+local HeroicLeap = Ability.add(6544, false, true)
+HeroicLeap.cooldown_duration = 45
+HeroicLeap.requires_charge = true
+local HeroicThrow = Ability.add(57755, false, true)
+HeroicThrow.cooldown_duration = 6
 local Pummel = Ability.add(6552, false, true)
+Pummel.buff_duration = 4
 Pummel.cooldown_duration = 15
+Pummel.triggers_gcd = false
 local BattleShout = Ability.add(6673, true, false)
 BattleShout.buff_duration = 3600
 BattleShout.cooldown_duration = 15
+local Taunt = Ability.add(355, false, true)
+Taunt.buff_duration = 3
+Taunt.cooldown_duration = 8
+Taunt.triggers_gcd = false
 ------ Procs
 
 ------ Talents
 
 ---- Arms
-
+local Avatar = Ability.add(107574, true, true)
+Avatar.rage_cost = -20
+Avatar.buff_duration = 20
+Avatar.cooldown_duration = 90
+local ColossusSmash = Ability.add(167105, false, true, 208086)
+ColossusSmash.cooldown_duration = 45
+ColossusSmash.buff_duration = 10
+local DeepWounds = Ability.add(115767, false, true)
+DeepWounds.buff_duration = 15
+local DieByTheSword = Ability.add(118038, true, true)
+DieByTheSword.buff_duration = 8
+DieByTheSword.cooldown_duration = 180
+local Execute = Ability.add(163201, false, true)
+Execute.rage_cost = 20
+local MortalStrike = Ability.add(12294, false, true)
+MortalStrike.rage_cost = 30
+MortalStrike.cooldown_duration = 6
+local Overpower = Ability.add(7384, true, true, 60503)
+Overpower.buff_duration = 12
+Overpower.cooldown_duration = 12
+local Rend = Ability.add(772, false, true)
+Rend.rage_cost = 30
+Rend.buff_duration = 12
+local Slam = Ability.add(1464, false, true)
+Slam.rage_cost = 20
+local SweepingStrikes = Ability.add(260708, true, true)
+SweepingStrikes.buff_duration = 12
+SweepingStrikes.cooldown_duration = 30
+local Whirlwind = Ability.add(1680, false, true)
+Whirlwind.rage_cost = 30
+Whirlwind:setAutoAoe(true)
+local Hamstring = Ability.add(1715, false, true)
+Hamstring.rage_cost = 10
+Hamstring.buff_duration = 15
+local Recklessness = Ability.add(1719, true, true)
+Recklessness.buff_duration = 10
+Recklessness.cooldown_duration = 90
+local VictoryRush = Ability.add(34428, false, true)
 ------ Talents
-
+local Bladestorm = Ability.add(46924, true, true)
+Bladestorm.buff_duration = 4
+Bladestorm.cooldown_duration = 60
+Bladestorm:setAutoAoe(true)
+local Cleave = Ability.add(845, false, true)
+Cleave.rage_cost = 20
+Cleave.cooldown_duration = 9
+Cleave:setAutoAoe(true)
+local DeadlyCalm = Ability.add(262228, true, true)
+DeadlyCalm.buff_duration = 6
+DeadlyCalm.cooldown_duration = 60
+DeadlyCalm.triggers_gcd = false
+local Dreadnaught = Ability.add(262150, false, true)
+local FervorOfBattle = Ability.add(202316, false, true)
+local Massacre = Ability.add(206315, false, true)
+local Ravager = Ability.add(152277, false, true)
+Ravager.buff_duration = 7
+Ravager.cooldown_duration = 60
+local Skullsplitter = Ability.add(260643, false, true)
+Skullsplitter.cooldown_duration = 21
+local Warbreaker = Ability.add(262161, true, true)
+Warbreaker.cooldown_duration = 45
+Warbreaker:setAutoAoe(true)
 ------ Procs
+local SuddenDeath = Ability.add(29725, true, true, 52437)
+SuddenDeath.buff_duration = 10
+local Victorious = Ability.add(32216, true, true)
+Victorious.buff_duration = 20
 
 ---- Fury
 
@@ -603,9 +678,15 @@ BattleShout.cooldown_duration = 15
 ------ Procs
 
 -- Azerite Traits
-
+local CrushingAssault = Ability.add(278824, true, true, 278826)
+CrushingAssault.buff_duration = 10
+local ExecutionersPrecision = Ability.add(272866, false, true, 272870)
+ExecutionersPrecision.buff_duration = 30
+local TestOfMight = Ability.add(275529, true, true, 275532)
+TestOfMight.buff_duration = 12
 -- Racials
-
+local LightsJudgment = Ability.add(255647, false, true)
+LightsJudgment.cooldown_duration = 150
 -- Trinket Effects
 
 -- End Abilities
@@ -766,6 +847,34 @@ end
 
 -- Start Ability Modifications
 
+function Ability:cost()
+	if DeadlyCalm:up() then
+		return 0
+	end
+	return self.rage_cost
+end
+
+function Execute:cost()
+	if SuddenDeath:up() then
+		return 0
+	end
+	return max(min(40, var.rage), self.rage_cost)
+end
+
+function Execute:usable()
+	if not SuddenDeath:up() and Target.healthPercentage >= (Massacre.known and 35 or 20) then
+		return false
+	end
+	return Ability.usable(self)
+end
+
+function VictoryRush:usable()
+	if Victorious:down() then
+		return false
+	end
+	return Ability.usable(self)
+end
+
 -- End Ability Modifications
 
 local function UpdateVars()
@@ -828,12 +937,255 @@ APL[SPEC.ARMS].main = function(self)
 			end
 		end
 		if Charge:usable() then
-			return Charge
+			UseExtra(Charge)
 		end
 	else
 		if BattleShout:usable() and BattleShout:remains() < 30 then
 			UseCooldown(BattleShout)
 		end
+	end
+--[[
+actions=charge
+actions+=/auto_attack
+actions+=/potion
+actions+=/blood_fury,if=debuff.colossus_smash.up
+actions+=/berserking,if=debuff.colossus_smash.up
+actions+=/arcane_torrent,if=debuff.colossus_smash.down&cooldown.mortal_strike.remains>1.5&rage<50
+actions+=/lights_judgment,if=debuff.colossus_smash.down
+actions+=/fireblood,if=debuff.colossus_smash.up
+actions+=/ancestral_call,if=debuff.colossus_smash.up
+actions+=/avatar,if=cooldown.colossus_smash.remains<8|(talent.warbreaker.enabled&cooldown.warbreaker.remains<8)
+actions+=/sweeping_strikes,if=spell_targets.whirlwind>1&(cooldown.bladestorm.remains>10|cooldown.colossus_smash.remains>8|azerite.test_of_might.enabled)
+actions+=/run_action_list,name=hac,if=raid_event.adds.exists
+actions+=/run_action_list,name=five_target,if=spell_targets.whirlwind>4
+actions+=/run_action_list,name=execute,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
+actions+=/run_action_list,name=single_target
+]]
+	if LightsJudgment:usable() and ColossusSmash:down() and Target.timeToDie > 4 then
+		UseExtra(LightsJudgment)
+	end
+	if Avatar:usable() and (ColossusSmash:remains() < 8 or (Warbreaker.known and Warbreaker:ready(8))) then
+		UseCooldown(Avatar)
+	end
+	if SweepingStrikes:ready() and Enemies() > 1 and (not Bladestorm:ready(10) or not ColossusSmash:ready(8) or TestOfMight.known) then
+		UseCooldown(SweepingStrikes)
+	end
+	if Enemies() >= 5 then
+		return self:five_target()
+	end
+--	if Enemies() >= 3 then
+--		return self:hac()
+--	end
+	if Target.healthPercentage < (Massacre.known and 35 or 20) then
+		return self:execute()
+	end
+	return self:single_target()
+end
+
+APL[SPEC.ARMS].execute = function(self)
+--[[
+actions.execute=skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
+actions.execute+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
+actions.execute+=/colossus_smash,if=debuff.colossus_smash.down
+actions.execute+=/warbreaker,if=debuff.colossus_smash.down
+actions.execute+=/deadly_calm
+actions.execute+=/bladestorm,if=rage<30&!buff.deadly_calm.up
+actions.execute+=/cleave,if=spell_targets.whirlwind>2
+actions.execute+=/slam,if=buff.crushing_assault.up
+actions.execute+=/mortal_strike,if=buff.overpower.stack=2&talent.dreadnaught.enabled|buff.executioners_precision.stack=2
+actions.execute+=/execute,if=buff.deadly_calm.up
+actions.execute+=/overpower
+actions.execute+=/execute
+]]
+	if Skullsplitter:usable() and Rage() < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
+		return Skullsplitter
+	end
+	if Ravager:usable() and not DeadlyCalm:up() and (ColossusSmash:ready(2) or (Warbreaker.known and Warbreaker:ready(2))) then
+		UseCooldown(Ravager)
+	end
+	if ColossusSmash:usable() and ColossusSmash:down() then
+		return ColossusSmash
+	end
+	if Warbreaker:usable() and ColossusSmash:down() then
+		return Warbreaker
+	end
+	if DeadlyCalm:usable() then
+		UseCooldown(DeadlyCalm)
+	end
+	if Bladestorm:usable() and Rage() < 30 and not DeadlyCalm:up() then
+		UseCooldown(Bladestorm)
+	end
+	if Cleave:usable() and Enemies() > 2 then
+		return Cleave
+	end
+	if CrushingAssault.known and Slam:usable() and CrushingAssault:up() then
+		return Slam
+	end
+	if MortalStrike:usable() and (Dreadnaught.known and Overpower:stack() == 2 or ExecutionersPrecision.known and ExecutionersPrecision:stack() == 2) then
+		return MortalStrike
+	end
+	if Execute:usable() and DeadlyCalm:up() then
+		return Execute
+	end
+	if Overpower:usable() then
+		return Overpower
+	end
+	if Execute:usable() then
+		return Execute
+	end
+	if VictoryRush:usable() then
+		return VictoryRush
+	end
+end
+
+APL[SPEC.ARMS].five_target = function(self)
+--[[
+actions.five_target=skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
+actions.five_target+=/ravager,if=(!talent.warbreaker.enabled|cooldown.warbreaker.remains<2)
+actions.five_target+=/colossus_smash,if=debuff.colossus_smash.down
+actions.five_target+=/warbreaker,if=debuff.colossus_smash.down
+actions.five_target+=/bladestorm,if=buff.sweeping_strikes.down&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.remains>4.5&!azerite.test_of_might.enabled)|buff.test_of_might.up)
+actions.five_target+=/deadly_calm
+actions.five_target+=/cleave
+actions.five_target+=/execute,if=(!talent.cleave.enabled&dot.deep_wounds.remains<2)|(buff.sudden_death.react|buff.stone_heart.react)&(buff.sweeping_strikes.up|cooldown.sweeping_strikes.remains>8)
+actions.five_target+=/mortal_strike,if=(!talent.cleave.enabled&dot.deep_wounds.remains<2)|buff.sweeping_strikes.up&buff.overpower.stack=2&(talent.dreadnaught.enabled|buff.executioners_precision.stack=2)
+actions.five_target+=/whirlwind,if=debuff.colossus_smash.up|(buff.crushing_assault.up&talent.fervor_of_battle.enabled)
+actions.five_target+=/whirlwind,if=buff.deadly_calm.up|rage>60
+actions.five_target+=/overpower
+actions.five_target+=/whirlwind
+]]
+	if Skullsplitter:usable() and Rage() < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
+		return Skullsplitter
+	end
+	if Ravager:usable() and (not Warbreaker.known or Warbreaker:ready(2)) then
+		UseCooldown(Ravager)
+	end
+	if ColossusSmash:usable() and ColossusSmash:down() then
+		return ColossusSmash
+	end
+	if Warbreaker:usable() and ColossusSmash:down() then
+		return Warbreaker
+	end
+	if Bladestorm:usable() and SweepingStrikes:down() and (not DeadlyCalm.known or DeadlyCalm:down()) and ((not TestOfMight.known and ColossusSmash:remains() > 4.5) or TestOfMight:up()) then
+		UseCooldown(Bladestorm)
+	end
+	if DeadlyCalm:usable() then
+		UseCooldown(DeadlyCalm)
+	end
+	if Cleave:usable() then
+		return Cleave
+	end
+	if Execute:usable() and ((not Cleave.known and DeepWounds:remains() < 2) or SuddenDeath:up() and (SweepingStrikes:up() or not SweepingStrikes:ready(8))) then
+		return Execute
+	end
+	if MortalStrike:usable() and ((not Cleave.known and DeepWounds:remains() < 2) or SweepingStrikes:up() and Overpower:stack() == 2 and (Dreadnaught.known or ExecutionersPrecision:stack() == 2)) then
+		return MortalStrike
+	end
+	if Whirlwind:usable() then
+		if ColossusSmash:up() or (CrushingAssault.known and FervorOfBattle.known and CrushingAssault:up()) then
+			return Whirlwind
+		end
+		if DeadlyCalm:up() or Rage() > 60 then
+			return Whirlwind
+		end
+	end
+	if Overpower:usable() then
+		return Overpower
+	end
+	if Whirlwind:usable() then
+		return Whirlwind
+	end
+	if VictoryRush:usable() then
+		return VictoryRush
+	end
+end
+
+APL[SPEC.ARMS].hac = function(self)
+--[[
+actions.hac=rend,if=remains<=duration*0.3&(!raid_event.adds.up|buff.sweeping_strikes.up)
+actions.hac+=/skullsplitter,if=rage<60&(cooldown.deadly_calm.remains>3|!talent.deadly_calm.enabled)
+actions.hac+=/deadly_calm,if=(cooldown.bladestorm.remains>6|talent.ravager.enabled&cooldown.ravager.remains>6)&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
+actions.hac+=/ravager,if=(raid_event.adds.up|raid_event.adds.in>target.time_to_die)&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
+actions.hac+=/colossus_smash,if=raid_event.adds.up|raid_event.adds.in>40|(raid_event.adds.in>20&talent.anger_management.enabled)
+actions.hac+=/warbreaker,if=raid_event.adds.up|raid_event.adds.in>40|(raid_event.adds.in>20&talent.anger_management.enabled)
+actions.hac+=/bladestorm,if=(debuff.colossus_smash.up&raid_event.adds.in>target.time_to_die)|raid_event.adds.up&((debuff.colossus_smash.remains>4.5&!azerite.test_of_might.enabled)|buff.test_of_might.up)
+actions.hac+=/overpower,if=!raid_event.adds.up|(raid_event.adds.up&azerite.seismic_wave.enabled)
+actions.hac+=/cleave,if=spell_targets.whirlwind>2
+actions.hac+=/execute,if=!raid_event.adds.up|(!talent.cleave.enabled&dot.deep_wounds.remains<2)|buff.sudden_death.react
+actions.hac+=/mortal_strike,if=!raid_event.adds.up|(!talent.cleave.enabled&dot.deep_wounds.remains<2)
+actions.hac+=/whirlwind,if=raid_event.adds.up
+actions.hac+=/overpower
+actions.hac+=/whirlwind,if=talent.fervor_of_battle.enabled
+actions.hac+=/slam,if=!talent.fervor_of_battle.enabled&!raid_event.adds.up
+]]
+
+end
+
+APL[SPEC.ARMS].single_target = function(self)
+--[[
+actions.single_target=rend,if=remains<=duration*0.3&debuff.colossus_smash.down
+actions.single_target+=/skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
+actions.single_target+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
+actions.single_target+=/colossus_smash,if=debuff.colossus_smash.down
+actions.single_target+=/warbreaker,if=debuff.colossus_smash.down
+actions.single_target+=/deadly_calm
+actions.single_target+=/execute,if=buff.sudden_death.react
+actions.single_target+=/bladestorm,if=cooldown.mortal_strike.remains&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.up&!azerite.test_of_might.enabled)|buff.test_of_might.up)
+actions.single_target+=/cleave,if=spell_targets.whirlwind>2
+actions.single_target+=/overpower,if=azerite.seismic_wave.rank=3
+actions.single_target+=/mortal_strike
+actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(buff.deadly_calm.up|rage>=60)
+actions.single_target+=/overpower
+actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(!azerite.test_of_might.enabled|debuff.colossus_smash.up)
+actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&(!azerite.test_of_might.enabled|debuff.colossus_smash.up|buff.deadly_calm.up|rage>=60)
+]]
+	if Rend:usable() and Rend:refreshable() and ColossusSmash:down() then
+		return Rend
+	end
+	if Skullsplitter:usable() and Rage() < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
+		return Skullsplitter
+	end
+	if Ravager:usable() and not DeadlyCalm:up() and (ColossusSmash:ready(2) or (Warbreaker.known and Warbreaker:ready(2))) then
+		UseCooldown(Ravager)
+	end
+	if ColossusSmash:usable() and ColossusSmash:down() then
+		return ColossusSmash
+	end
+	if Warbreaker:usable() and ColossusSmash:down() then
+		return Warbreaker
+	end
+	if DeadlyCalm:usable() then
+		UseCooldown(DeadlyCalm)
+	end
+	if SuddenDeath.known and Execute:usable() and SuddenDeath:up() then
+		return Execute
+	end
+	if Bladestorm:usable() and not MortalStrike:ready() and (not DeadlyCalm.known or DeadlyCalm:down()) and ((not TestOfMight.known and ColossusSmash:up()) or TestOfMight:up()) then
+		UseCooldown(Bladestorm)
+	end
+	if Cleave:usable() and Enemies() > 2 then
+		return Cleave
+	end
+	if MortalStrike:usable() then
+		return MortalStrike
+	end
+	if FervorOfBattle.known and Whirlwind:usable() and (DeadlyCalm:up() or Rage() >= 60) then
+		return Whirlwind
+	end
+	if Overpower:usable() then
+		return Overpower
+	end
+	if FervorOfBattle.known then
+		if Whirlwind:usable() and (not TestOfMight.known or ColossusSmash:up()) then
+			return Whirlwind
+		end
+	else
+		if Slam:usable() and (not TestOfMight.known or ColossusSmash:up() or DeadlyCalm:up() or Rage() >= 60) then
+			return Slam
+		end
+	end
+	if VictoryRush:usable() then
+		return VictoryRush
 	end
 end
 
@@ -1424,6 +1776,9 @@ local function UpdateAbilityData()
 	for _, ability in next, abilities do
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 		ability.known = (IsPlayerSpell(ability.spellId) or (ability.spellId2 and IsPlayerSpell(ability.spellId2)) or Azerite.traits[ability.spellId]) and true or false
+	end
+	if Warbreaker.known then
+		ColosussSmash.known = false
 	end
 end
 

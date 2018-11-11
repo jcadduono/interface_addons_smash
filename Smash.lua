@@ -75,6 +75,7 @@ local function InitializeVariables()
 		auto_aoe = false,
 		auto_aoe_ttl = 10,
 		pot = false,
+		swing_timer = true,
 	})
 end
 
@@ -110,7 +111,12 @@ local ItemEquipped = {
 local Azerite = {}
 
 local var = {
-	gcd = 1.5
+	gcd = 1.5,
+	time_diff = 0,
+	equipped_mh = false,
+	equipped_oh = false,
+	next_swing_mh = 0,
+	next_swing_oh = 0
 }
 
 local targetModes = {
@@ -601,6 +607,10 @@ local Avatar = Ability.add(107574, true, true)
 Avatar.rage_cost = -20
 Avatar.buff_duration = 20
 Avatar.cooldown_duration = 90
+local Bladestorm = Ability.add(46924, true, true)
+Bladestorm.buff_duration = 4
+Bladestorm.cooldown_duration = 60
+Bladestorm:setAutoAoe(true)
 local ColossusSmash = Ability.add(167105, false, true, 208086)
 ColossusSmash.cooldown_duration = 45
 ColossusSmash.buff_duration = 10
@@ -614,12 +624,14 @@ Execute.rage_cost = 20
 local MortalStrike = Ability.add(12294, false, true)
 MortalStrike.rage_cost = 30
 MortalStrike.cooldown_duration = 6
+MortalStrike.hasted_cooldown = true
 local Overpower = Ability.add(7384, true, true, 60503)
 Overpower.buff_duration = 12
 Overpower.cooldown_duration = 12
 local Rend = Ability.add(772, false, true)
 Rend.rage_cost = 30
 Rend.buff_duration = 12
+Rend.hasted_ticks = true
 local Slam = Ability.add(1464, false, true)
 Slam.rage_cost = 20
 local SweepingStrikes = Ability.add(260708, true, true)
@@ -636,13 +648,10 @@ Recklessness.buff_duration = 10
 Recklessness.cooldown_duration = 90
 local VictoryRush = Ability.add(34428, false, true)
 ------ Talents
-local Bladestorm = Ability.add(46924, true, true)
-Bladestorm.buff_duration = 4
-Bladestorm.cooldown_duration = 60
-Bladestorm:setAutoAoe(true)
 local Cleave = Ability.add(845, false, true)
 Cleave.rage_cost = 20
 Cleave.cooldown_duration = 9
+Cleave.hasted_cooldown = true
 Cleave:setAutoAoe(true)
 local DeadlyCalm = Ability.add(262228, true, true)
 DeadlyCalm.buff_duration = 6
@@ -656,6 +665,7 @@ Ravager.buff_duration = 7
 Ravager.cooldown_duration = 60
 local Skullsplitter = Ability.add(260643, false, true)
 Skullsplitter.cooldown_duration = 21
+Skullsplitter.hasted_cooldown = true
 local Warbreaker = Ability.add(262161, true, true)
 Warbreaker.cooldown_duration = 45
 Warbreaker:setAutoAoe(true)
@@ -1123,23 +1133,25 @@ end
 
 APL[SPEC.ARMS].single_target = function(self)
 --[[
-actions.single_target=rend,if=remains<=duration*0.3&debuff.colossus_smash.down
+actions.single_target=rend,if=!remains&debuff.colossus_smash.down
 actions.single_target+=/skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
 actions.single_target+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
 actions.single_target+=/colossus_smash,if=debuff.colossus_smash.down
 actions.single_target+=/warbreaker,if=debuff.colossus_smash.down
 actions.single_target+=/deadly_calm
 actions.single_target+=/execute,if=buff.sudden_death.react
+actions.single_target+=/rend,if=refreshable&cooldown.colossus_smash.remains<5
 actions.single_target+=/bladestorm,if=cooldown.mortal_strike.remains&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.up&!azerite.test_of_might.enabled)|buff.test_of_might.up)
 actions.single_target+=/cleave,if=spell_targets.whirlwind>2
 actions.single_target+=/overpower,if=azerite.seismic_wave.rank=3
 actions.single_target+=/mortal_strike
 actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(buff.deadly_calm.up|rage>=60)
 actions.single_target+=/overpower
-actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(!azerite.test_of_might.enabled|debuff.colossus_smash.up)
-actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&(!azerite.test_of_might.enabled|debuff.colossus_smash.up|buff.deadly_calm.up|rage>=60)
+actions.single_target+=/rend,target_if=min:remains,if=refreshable&debuff.colossus_smash.down
+actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5&(!azerite.test_of_might.enabled|debuff.colossus_smash.up)
+actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5
 ]]
-	if Rend:usable() and Rend:refreshable() and ColossusSmash:down() then
+	if Rend:usable() and Rend:down() and ColossusSmash:down() then
 		return Rend
 	end
 	if Skullsplitter:usable() and Rage() < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
@@ -1160,6 +1172,9 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&(!azerite.test_
 	if SuddenDeath.known and Execute:usable() and SuddenDeath:up() then
 		return Execute
 	end
+	if Rend:usable() and Rend:refreshable() and ColossusSmash:cooldown() < 5 then
+		return Rend
+	end
 	if Bladestorm:usable() and not MortalStrike:ready() and (not DeadlyCalm.known or DeadlyCalm:down()) and ((not TestOfMight.known and ColossusSmash:up()) or TestOfMight:up()) then
 		UseCooldown(Bladestorm)
 	end
@@ -1175,12 +1190,18 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&(!azerite.test_
 	if Overpower:usable() then
 		return Overpower
 	end
+	if Rend:usable() and Rend:refreshable() and ColossusSmash:down() then
+		return Rend
+	end
+	if MortalStrike:ready(0.5) then
+		return MortalStrike
+	end
 	if FervorOfBattle.known then
 		if Whirlwind:usable() and (not TestOfMight.known or ColossusSmash:up()) then
 			return Whirlwind
 		end
 	else
-		if Slam:usable() and (not TestOfMight.known or ColossusSmash:up() or DeadlyCalm:up() or Rage() >= 60) then
+		if Slam:usable() then
 			return Slam
 		end
 	end
@@ -1572,6 +1593,20 @@ local function UpdateCombat()
 			smashPanel.dimmer:Show()
 		end
 	end
+	if Opt.swing_timer then
+		if var.main and var.main:cost() <= Rage() then
+			smashPanel.text:Hide()
+		else
+			local next_swing
+			if var.equipped_oh then
+				next_swing = min(var.next_swing_mh, var.next_swing_oh)
+			else
+				next_swing = var.next_swing_mh
+			end
+			smashPanel.text:SetText(format('%.1f', max(0, next_swing - (var.time - var.time_diff))))
+			smashPanel.text:Show()
+		end
+	end
 	if Opt.interrupt then
 		UpdateInterrupt()
 	end
@@ -1621,7 +1656,7 @@ function events:ADDON_LOADED(name)
 end
 
 function events:COMBAT_LOG_EVENT_UNFILTERED()
-	local timeStamp, eventType, hideCaster, srcGUID, srcName, srcFlags, srcRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellId, spellName, spellSchool, extraType = CombatLogGetCurrentEventInfo()
+	local timeStamp, eventType, hideCaster, srcGUID, srcName, srcFlags, srcRaidFlags, dstGUID, dstName, dstFlags, dstRaidFlags, spellId, spellName, spellSchool, extraType, offHand = CombatLogGetCurrentEventInfo()
 	if Opt.auto_aoe then
 		if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
 			if dstGUID == var.player then
@@ -1633,8 +1668,22 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			autoAoe:remove(dstGUID)
 		end
 	end
-	if srcGUID ~= var.player and srcGUID ~= var.pet then
+	if srcGUID ~= var.player then
 		return
+	end
+	if Opt.swing_timer and (eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED') then
+		var.time_diff = GetTime() - timeStamp
+		local mh, oh = UnitAttackSpeed('player')
+		if offHand and oh then
+			var.next_swing_oh = timeStamp + oh
+		else
+			var.next_swing_mh = timeStamp + mh
+		end
+		if eventType == 'SWING_MISSED' then
+			smashPanel.text:SetTextColor(1, 0, 0, 1)
+		else
+			smashPanel.text:SetTextColor(1, 1, 1, 1)
+		end
 	end
 	local castedAbility = abilityBySpellId[spellId]
 	if not castedAbility then
@@ -1768,7 +1817,8 @@ function events:PLAYER_REGEN_ENABLED()
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
-
+	var.equipped_mh = GetInventoryItemID('player', 16) and true
+	var.equipped_oh = GetInventoryItemID('player', 17) and true
 end
 
 local function UpdateAbilityData()
@@ -1779,6 +1829,9 @@ local function UpdateAbilityData()
 	end
 	if Warbreaker.known then
 		ColosussSmash.known = false
+	end
+	if Ravager.known then
+		Bladestorm.known = false
 	end
 end
 
@@ -2075,6 +2128,15 @@ function SlashCmdList.Smash(msg, editbox)
 		end
 		return print('Smash - Show Battle potions in cooldown UI: ' .. (Opt.pot and '|cFF00C000On' or '|cFFC00000Off'))
 	end
+	if startsWith(msg[1], 'sw') then
+		if msg[2] then
+			Opt.swing_timer = msg[2] == 'on'
+			if not Opt.swing_timer then
+				smashPanel.text:Hide()
+			end
+		end
+		return print('Smash - Show time remaining until next swing when rage starved: ' .. (Opt.swing_timer and '|cFF00C000On' or '|cFFC00000Off'))
+	end
 	if msg[1] == 'reset' then
 		smashPanel:ClearAllPoints()
 		smashPanel:SetPoint('CENTER', 0, -169)
@@ -2104,6 +2166,7 @@ function SlashCmdList.Smash(msg, editbox)
 		'auto |cFF00C000on|r/|cFFC00000off|r  - automatically change target mode on AoE spells',
 		'ttl |cFFFFD000[seconds]|r  - time target exists in auto AoE after being hit (default is 10 seconds)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show Battle potions in cooldown UI',
+		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing when rage starved',
 		'|cFFFFD000reset|r - reset the location of the Smash UI to default',
 	} do
 		print('  ' .. SLASH_Smash1 .. ' ' .. cmd)

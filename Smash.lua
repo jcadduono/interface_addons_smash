@@ -7,9 +7,12 @@ end
 local GetSpellCooldown = _G.GetSpellCooldown
 local GetSpellCharges = _G.GetSpellCharges
 local GetTime = _G.GetTime
-local UnitCastingInfo = _G.UnitCastingInfo
 local UnitAura = _G.UnitAura
 -- end copy global functions
+
+-- have to fix these later
+local UnitCastingInfo = function() return nil end
+local UnitChannelInfo = function() return nil end
 
 -- useful functions
 local function between(n, min, max)
@@ -86,18 +89,17 @@ local function InitializeOpts()
 		aoe = false,
 		auto_aoe = false,
 		auto_aoe_ttl = 10,
-		pot = false,
 		trinket = true,
 		swing_timer = true,
 	})
 end
 
--- specialization constants
-local SPEC = {
+-- stance constants
+local STANCE = {
 	NONE = 0,
-	ARMS = 1,
-	FURY = 2,
-	PROTECTION = 3,
+	BATTLE = 1,
+	DEFENSIVE = 2,
+	BERSERKER = 3,
 }
 
 local events, glows = {}, {}
@@ -123,7 +125,7 @@ local Player = {
 	equipped_mh = false,
 	equipped_oh = false,
 	next_swing_mh = 0,
-	next_swing_oh = 0
+	next_swing_oh = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 		[165581] = true, -- Crest of Pa'ku (Horde)
@@ -136,11 +138,7 @@ local Target = {
 	guid = 0,
 	healthArray = {},
 	hostile = false,
-	estimated_range = 30,
 }
-
--- Azerite trait API access
-local Azerite = {}
 
 local smashPanel = CreateFrame('Frame', 'smashPanel', UIParent)
 smashPanel:SetPoint('CENTER', 0, -169)
@@ -243,24 +241,24 @@ smashExtraPanel.border:SetTexture('Interface\\AddOns\\Smash\\border.blp')
 -- Start Auto AoE
 
 local targetModes = {
-	[SPEC.NONE] = {
+	[STANCE.NONE] = {
 		{1, ''}
 	},
-	[SPEC.ARMS] = {
+	[STANCE.BATTLE] = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
 		{4, '4'},
 		{5, '5+'},
 	},
-	[SPEC.FURY] = {
+	[STANCE.DEFENSIVE] = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
 		{4, '4'},
 		{5, '5+'},
 	},
-	[SPEC.PROTECTION] = {
+	[STANCE.BERSERKER] = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
@@ -273,21 +271,21 @@ local function SetTargetMode(mode)
 	if mode == targetMode then
 		return
 	end
-	targetMode = min(mode, #targetModes[Player.spec])
-	Player.enemies = targetModes[Player.spec][targetMode][1]
-	smashPanel.text.br:SetText(targetModes[Player.spec][targetMode][2])
+	targetMode = min(mode, #targetModes[Player.stance])
+	Player.enemies = targetModes[Player.stance][targetMode][1]
+	smashPanel.text.br:SetText(targetModes[Player.stance][targetMode][2])
 end
 Smash_SetTargetMode = SetTargetMode
 
 local function ToggleTargetMode()
 	local mode = targetMode + 1
-	SetTargetMode(mode > #targetModes[Player.spec] and 1 or mode)
+	SetTargetMode(mode > #targetModes[Player.stance] and 1 or mode)
 end
 Smash_ToggleTargetMode = ToggleTargetMode
 
 local function ToggleTargetModeReverse()
 	local mode = targetMode - 1
-	SetTargetMode(mode < 1 and #targetModes[Player.spec] or mode)
+	SetTargetMode(mode < 1 and #targetModes[Player.stance] or mode)
 end
 Smash_ToggleTargetModeReverse = ToggleTargetModeReverse
 
@@ -295,7 +293,6 @@ local autoAoe = {
 	targets = {},
 	blacklist = {},
 	ignored_units = {
-		[120651] = true, -- Explosives (Mythic+ affix)
 	},
 }
 
@@ -341,8 +338,8 @@ function autoAoe:update()
 		return
 	end
 	Player.enemies = count
-	for i = #targetModes[Player.spec], 1, -1 do
-		if count >= targetModes[Player.spec][i][1] then
+	for i = #targetModes[Player.stance], 1, -1 do
+		if count >= targetModes[Player.stance][i][1] then
 			SetTargetMode(i)
 			Player.enemies = count
 			return
@@ -379,17 +376,14 @@ local abilities = {
 	all = {}
 }
 
-function Ability.add(spellId, buff, player, spellId2)
+function Ability.add(spellIds, buff, player)
 	local ability = {
-		spellId = spellId,
-		spellId2 = spellId2,
+		spellIds = spellIds,
+		spellId = spellIds[1],
 		name = false,
 		icon = false,
 		requires_charge = false,
 		triggers_gcd = true,
-		hasted_duration = false,
-		hasted_cooldown = false,
-		hasted_ticks = false,
 		known = false,
 		rage_cost = 0,
 		cooldown_duration = 0,
@@ -406,7 +400,7 @@ end
 
 function Ability:match(spell)
 	if type(spell) == 'number' then
-		return spell == self.spellId or (self.spellId2 and spell == self.spellId2)
+		return spell == self.spellId
 	elseif type(spell) == 'string' then
 		return spell:lower() == self.name:lower()
 	elseif type(spell) == 'table' then
@@ -434,7 +428,7 @@ end
 
 function Ability:remains()
 	local _, i, id, expires
-	for i = 1, 40 do
+	for i = 1, 16 do
 		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
 			return 0
@@ -478,11 +472,11 @@ function Ability:ticking()
 end
 
 function Ability:tickTime()
-	return self.hasted_ticks and (Player.haste_factor * self.tick_interval) or self.tick_interval
+	return self.tick_interval
 end
 
 function Ability:cooldownDuration()
-	return self.hasted_cooldown and (Player.haste_factor * self.cooldown_duration) or self.cooldown_duration
+	return self.cooldown_duration
 end
 
 function Ability:cooldown()
@@ -498,7 +492,7 @@ end
 
 function Ability:stack()
 	local _, i, id, expires, count
-	for i = 1, 40 do
+	for i = 1, 16 do
 		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
 			return 0
@@ -540,7 +534,7 @@ function Ability:maxCharges()
 end
 
 function Ability:duration()
-	return self.hasted_duration and (Player.haste_factor * self.buff_duration) or self.buff_duration
+	return self.buff_duration
 end
 
 function Ability:casting()
@@ -548,7 +542,7 @@ function Ability:casting()
 end
 
 function Ability:channeling()
-	return UnitChannelInfo('player') == self.name
+	return ChannelInfo() == self.name
 end
 
 function Ability:castTime()
@@ -568,10 +562,6 @@ function Ability:previous(n)
 		i = i - 1
 	end
 	return Player.previous_gcd[i] == self
-end
-
-function Ability:azeriteRank()
-	return Azerite.traits[self.spellId] or 0
 end
 
 function Ability:autoAoe(removeUnaffected, trigger)
@@ -669,202 +659,124 @@ end
 
 -- Warrior Abilities
 ---- Multiple Specializations
-local BerserkerRage = Ability.add(18499, true, true)
-BerserkerRage.buff_duration = 6
-BerserkerRage.cooldown_duration = 60
-local Charge = Ability.add(100, false, true)
-Charge.cooldown_duration = 20
-Charge.rage_cost = -20
-Charge.requires_charge = true
-local HeroicLeap = Ability.add(6544, false, true)
-HeroicLeap.cooldown_duration = 45
-HeroicLeap.requires_charge = true
-local HeroicThrow = Ability.add(57755, false, true)
-HeroicThrow.cooldown_duration = 6
-local Pummel = Ability.add(6552, false, true)
+local BerserkerRage = Ability.add({18499}, true, true)
+BerserkerRage.buff_duration = 10
+BerserkerRage.cooldown_duration = 30
+local Bloodrage = Ability.add({2687}, true, false)
+Bloodrage.cooldown_duration = 60
+Bloodrage.buff = Ability.add({29131}, true, true)
+Bloodrage.buff.buff_duration = 10
+local Pummel = Ability.add({6552, 6554}, false, true)
 Pummel.buff_duration = 4
-Pummel.cooldown_duration = 15
+Pummel.cooldown_duration = 10
 Pummel.triggers_gcd = false
-local BattleShout = Ability.add(6673, true, false)
-BattleShout.buff_duration = 3600
-BattleShout.cooldown_duration = 15
-local Taunt = Ability.add(355, false, true)
-Taunt.buff_duration = 3
-Taunt.cooldown_duration = 8
-Taunt.triggers_gcd = false
 ------ Procs
 
 ------ Talents
 
 ---- Arms
-local Avatar = Ability.add(107574, true, true)
-Avatar.rage_cost = -20
-Avatar.buff_duration = 20
-Avatar.cooldown_duration = 90
-local Bladestorm = Ability.add(46924, true, true)
-Bladestorm.buff_duration = 4
-Bladestorm.cooldown_duration = 60
-Bladestorm:setAutoAoe(true)
-local ColossusSmash = Ability.add(167105, false, true, 208086)
-ColossusSmash.cooldown_duration = 45
-ColossusSmash.buff_duration = 10
-local DeepWounds = Ability.add(115767, false, true)
-DeepWounds.buff_duration = 15
-local DieByTheSword = Ability.add(118038, true, true)
-DieByTheSword.buff_duration = 8
-DieByTheSword.cooldown_duration = 180
-local Execute = Ability.add(163201, false, true)
-Execute.rage_cost = 20
-local MortalStrike = Ability.add(12294, false, true)
-MortalStrike.rage_cost = 30
-MortalStrike.cooldown_duration = 6
-MortalStrike.hasted_cooldown = true
-local Overpower = Ability.add(7384, true, true, 60503)
-Overpower.buff_duration = 12
-Overpower.cooldown_duration = 12
-local Rend = Ability.add(772, false, true)
-Rend.rage_cost = 30
-Rend.buff_duration = 12
-Rend.hasted_ticks = true
-local Slam = Ability.add(1464, false, true)
-Slam.rage_cost = 20
-local SweepingStrikes = Ability.add(260708, true, true)
-SweepingStrikes.buff_duration = 12
-SweepingStrikes.cooldown_duration = 30
-local Whirlwind = Ability.add(1680, false, true)
-Whirlwind.rage_cost = 30
-Whirlwind:setAutoAoe(true)
-local Hamstring = Ability.add(1715, false, true)
+local BattleStance = Ability.add({2457}, false, true)
+BattleStance.cooldown_duration = 1
+local Charge = Ability.add({100, 6178, 11578}, false, true)
+Charge.cooldown_duration = 15
+local Cleave = Ability.add({845, 7369, 11608, 11609, 20569}, false, true)
+Cleave.rage_cost = 20
+Cleave:autoAoe(false)
+local Execute = Ability.add({5308, 20658, 20660, 20661, 20662}, false, true)
+Execute.rage_cost = 15
+local HeroicStrike = Ability.add({78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286}, false, true)
+HeroicStrike.rage_cost = 15
+local Overpower = Ability.add({7384, 7887, 11584, 11585}, false, true)
+Overpower.cooldown_duration = 5
+Overpower.rage_cost = 5
+local Rend = Ability.add({772, 6546, 6547, 6548, 11572, 11573, 11574}, false, true)
+Rend.rage_cost = 10
+Rend.buff_duration = 15
+local Slam = Ability.add({1464, 8820, 11604, 11605}, false, true)
+Slam.rage_cost = 15
+local Whirlwind = Ability.add({1680}, false, true)
+Whirlwind.rage_cost = 25
+Whirlwind.cooldown_duration = 10
+Whirlwind:autoAoe(false)
+local Hamstring = Ability.add({1715, 7372, 7373}, false, false)
 Hamstring.rage_cost = 10
 Hamstring.buff_duration = 15
-local Recklessness = Ability.add(1719, true, true)
-Recklessness.buff_duration = 10
-Recklessness.cooldown_duration = 90
-local VictoryRush = Ability.add(34428, false, true)
+local Recklessness = Ability.add({1719}, true, true)
+Recklessness.buff_duration = 15
+Recklessness.cooldown_duration = 1800
+local Retaliation = Ability.add({20230}, true, true)
+Retaliation.buff_duration = 15
+Retaliation.cooldown_duration = 1800
+local ThunderClap = Ability.add({6343, 8198, 8204, 8205, 11580, 11581}, false, true)
+ThunderClap.cooldown_duration = 4
+ThunderClap.rage_cost = 20
+ThunderClap:autoAoe(false)
 ------ Talents
-local Cleave = Ability.add(845, false, true)
-Cleave.rage_cost = 20
-Cleave.cooldown_duration = 9
-Cleave.hasted_cooldown = true
-Cleave:setAutoAoe(true)
-local DeadlyCalm = Ability.add(262228, true, true)
-DeadlyCalm.buff_duration = 6
-DeadlyCalm.cooldown_duration = 60
-DeadlyCalm.triggers_gcd = false
-local Dreadnaught = Ability.add(262150, false, true)
-local FervorOfBattle = Ability.add(202316, false, true)
-local Massacre = Ability.add(206315, false, true)
-local Ravager = Ability.add(152277, false, true)
-Ravager.buff_duration = 7
-Ravager.cooldown_duration = 60
-local Skullsplitter = Ability.add(260643, false, true)
-Skullsplitter.cooldown_duration = 21
-Skullsplitter.hasted_cooldown = true
-local Warbreaker = Ability.add(262161, true, true)
-Warbreaker.cooldown_duration = 45
-Warbreaker:setAutoAoe(true)
+local DeepWounds = Ability.add({12834}, false, true)
+DeepWounds.buff_duration = 12
+local MortalStrike = Ability.add({12294}, false, true)
+MortalStrike.rage_cost = 30
+MortalStrike.cooldown_duration = 6
+local SweepingStrikes = Ability.add({12292}, true, true)
+SweepingStrikes.rage_cost = 30
+SweepingStrikes.buff_duration = 20
+SweepingStrikes.cooldown_duration = 30
 ------ Procs
-local SuddenDeath = Ability.add(29725, true, true, 52437)
-SuddenDeath.buff_duration = 10
-local Victorious = Ability.add(32216, true, true)
-Victorious.buff_duration = 20
 
 ---- Fury
-
+local BattleShout = Ability.add({6673, 5242, 6192, 11549, 11550, 11551, 25289}, true, false)
+BattleShout.buff_duration = 120
+BattleShout.rage_cost = 10
+local BerserkerStance = Ability.add({2458}, false, true)
+BerserkerStance.cooldown_duration = 1
+local Intercept = Ability.add({20252, 20616, 20617}, false, true)
+Intercept.cooldown_duration = 30
 ------ Talents
 
 ------ Procs
 
 ---- Protection
-
+local DefensiveStance = Ability.add({71}, false, true)
+DefensiveStance.cooldown_duration = 1
+local DemoralizingShout = Ability.add({1160, 6190, 11554, 11555, 11556}, false, false)
+DemoralizingShout.rage_cost = 10
+local Disarm = Ability.add({676}, false, false)
+Disarm.buff_duration = 10
+Disarm.cooldown_duration = 60
+Disarm.rage_cost = 20
+local IntimidatingShout = Ability.add({5246}, false, false)
+IntimidatingShout.buff_duration = 8
+IntimidatingShout.cooldown_duration = 180
+IntimidatingShout.rage_cost = 25
+local MockingBlow = Ability.add({694, 7400, 7402, 20559, 20560}, false, true)
+MockingBlow.buff_duration = 6
+MockingBlow.cooldown_duration = 120
+MockingBlow.rage_cost = 10
+local Revenge = Ability.add({6572, 6574, 7379, 11600, 11601, 25288}, false, true)
+Revenge.cooldown_duration = 5
+Revenge.rage_cost = 5
+local ShieldBash = Ability.add({72, 1671, 1672}, false, true)
+ShieldBash.cooldown_duration = 12
+ShieldBash.rage_cost = 10
+local ShieldBlock = Ability.add({2565}, true, true)
+ShieldBlock.cooldown_duration = 5
+ShieldBlock.rage_cost = 10
+local SunderArmor = Ability.add({7386, 7405, 8380, 11596, 11697}, false, false)
+SunderArmor.buff_duration = 30
+SunderArmor.rage_cost = 15
+local Taunt = Ability.add({355}, false, true)
+Taunt.cooldown_duration = 10
+Taunt.triggers_gcd = false
 ------ Talents
 
 ------ Procs
 
--- Azerite Traits
-local CrushingAssault = Ability.add(278824, true, true, 278826)
-CrushingAssault.buff_duration = 10
-local ExecutionersPrecision = Ability.add(272866, false, true, 272870)
-ExecutionersPrecision.buff_duration = 30
-local TestOfMight = Ability.add(275529, true, true, 275532)
-TestOfMight.buff_duration = 12
--- Heart of Azeroth
----- Major Essences
-local ConcentratedFlame = Ability.add(295373, true, true, 295378)
-ConcentratedFlame.buff_duration = 180
-ConcentratedFlame.cooldown_duration = 30
-ConcentratedFlame.requires_charge = true
-ConcentratedFlame.essence_id = 12
-ConcentratedFlame.essence_major = true
-ConcentratedFlame.dot = Ability.add(295368, false, true)
-ConcentratedFlame.dot.buff_duration = 6
-ConcentratedFlame.dot.essence_id = 12
-ConcentratedFlame.dot.essence_major = true
-local GuardianOfAzeroth = Ability.add(295840, false, true)
-GuardianOfAzeroth.cooldown_duration = 180
-GuardianOfAzeroth.essence_id = 14
-GuardianOfAzeroth.essence_major = true
-local FocusedAzeriteBeam = Ability.add(295258, false, true)
-FocusedAzeriteBeam.cooldown_duration = 90
-FocusedAzeriteBeam.essence_id = 5
-FocusedAzeriteBeam.essence_major = true
-local MemoryOfLucidDreams = Ability.add(298357, true, true)
-MemoryOfLucidDreams.buff_duration = 15
-MemoryOfLucidDreams.cooldown_duration = 120
-MemoryOfLucidDreams.essence_id = 27
-MemoryOfLucidDreams.essence_major = true
-local PurifyingBlast = Ability.add(295337, false, true, 295338)
-PurifyingBlast.cooldown_duration = 60
-PurifyingBlast.essence_id = 6
-PurifyingBlast.essence_major = true
-PurifyingBlast:autoAoe(true)
-local RippleInSpace = Ability.add(302731, true, true)
-RippleInSpace.buff_duration = 2
-RippleInSpace.cooldown_duration = 60
-RippleInSpace.essence_id = 15
-RippleInSpace.essence_major = true
-local TheUnboundForce = Ability.add(298452, false, true)
-TheUnboundForce.cooldown_duration = 45
-TheUnboundForce.essence_id = 28
-TheUnboundForce.essence_major = true
-local VisionOfPerfection = Ability.add(299370, true, true, 303345)
-VisionOfPerfection.buff_duration = 10
-VisionOfPerfection.essence_id = 22
-VisionOfPerfection.essence_major = true
-local WorldveinResonance = Ability.add(295186, true, true)
-WorldveinResonance.cooldown_duration = 60
-WorldveinResonance.essence_id = 4
-WorldveinResonance.essence_major = true
----- Minor Essences
-local AncientFlame = Ability.add(295367, false, true)
-AncientFlame.buff_duration = 10
-AncientFlame.essence_id = 12
-local CondensedLifeForce = Ability.add(295367, false, true)
-CondensedLifeForce.essence_id = 14
-local FocusedEnergy = Ability.add(295248, true, true)
-FocusedEnergy.buff_duration = 4
-FocusedEnergy.essence_id = 5
-local Lifeblood = Ability.add(295137, true, true)
-Lifeblood.essence_id = 4
-local LucidDreams = Ability.add(298343, true, true)
-LucidDreams.buff_duration = 8
-LucidDreams.essence_id = 27
-local PurificationProtocol = Ability.add(295305, false, true)
-PurificationProtocol.essence_id = 6
-PurificationProtocol:autoAoe()
-local RealityShift = Ability.add(302952, true, true)
-RealityShift.buff_duration = 20
-RealityShift.cooldown_duration = 30
-RealityShift.essence_id = 15
-local RecklessForce = Ability.add(302917, true, true)
-RecklessForce.essence_id = 28
-local StriveForPerfection = Ability.add(299369, true, true)
-StriveForPerfection.essence_id = 22
 -- PvP talents
 
 -- Racials
-local LightsJudgment = Ability.add(255647, false, true)
-LightsJudgment.cooldown_duration = 150
+local BloodFury = Ability.add({20572}, true, true)
+BloodFury.buff_duration = 15
+BloodFury.cooldown_duration = 180
 -- Trinket Effects
 
 -- End Abilities
@@ -932,71 +844,11 @@ function InventoryItem:usable(seconds)
 end
 
 -- Inventory Items
-local GreaterFlaskOfTheUndertow = InventoryItem.add(168654)
-GreaterFlaskOfTheUndertow.buff = Ability.add(298841, true, true)
-local SuperiorBattlePotionOfStrength = InventoryItem.add(168500)
-SuperiorBattlePotionOfStrength.buff = Ability.add(298154, true, true)
-SuperiorBattlePotionOfStrength.buff.triggers_gcd = false
+
 -- Equipment
 local Trinket1 = InventoryItem.add(0)
 local Trinket2 = InventoryItem.add(0)
 -- End Inventory Items
-
--- Start Azerite Trait API
-
-Azerite.equip_slots = { 1, 3, 5 } -- Head, Shoulder, Chest
-
-function Azerite:initialize()
-	self.locations = {}
-	self.traits = {}
-	self.essences = {}
-	local i
-	for i = 1, #self.equip_slots do
-		self.locations[i] = ItemLocation:CreateFromEquipmentSlot(self.equip_slots[i])
-	end
-end
-
-function Azerite:update()
-	local _, loc, slot, pid, pinfo
-	for pid in next, self.traits do
-		self.traits[pid] = nil
-	end
-	for pid in next, self.essences do
-		self.essences[pid] = nil
-	end
-	for _, loc in next, self.locations do
-		if GetInventoryItemID('player', loc:GetEquipmentSlot()) and C_AzeriteEmpoweredItem.IsAzeriteEmpoweredItem(loc) then
-			for _, slot in next, C_AzeriteEmpoweredItem.GetAllTierInfo(loc) do
-				if slot.azeritePowerIDs then
-					for _, pid in next, slot.azeritePowerIDs do
-						if C_AzeriteEmpoweredItem.IsPowerSelected(loc, pid) then
-							self.traits[pid] = 1 + (self.traits[pid] or 0)
-							pinfo = C_AzeriteEmpoweredItem.GetPowerInfo(pid)
-							if pinfo and pinfo.spellID then
-								self.traits[pinfo.spellID] = self.traits[pid]
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-	for _, loc in next, C_AzeriteEssence.GetMilestones() do
-		if loc.slot then
-			pid = C_AzeriteEssence.GetMilestoneEssence(loc.ID)
-			if pid then
-				pinfo = C_AzeriteEssence.GetEssenceInfo(pid)
-				self.essences[pid] = {
-					id = pid,
-					rank = pinfo.rank,
-					major = loc.slot == 0,
-				}
-			end
-		end
-	end
-end
-
--- End Azerite Trait API
 
 -- Start Helpful Functions
 
@@ -1015,54 +867,30 @@ local function TimeInCombat()
 	return 0
 end
 
-local function BloodlustActive()
-	local _, i, id
-	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL')
-		if (
-			id == 2825 or   -- Bloodlust (Horde Shaman)
-			id == 32182 or  -- Heroism (Alliance Shaman)
-			id == 80353 or  -- Time Warp (Mage)
-			id == 90355 or  -- Ancient Hysteria (Hunter Pet - Core Hound)
-			id == 160452 or -- Netherwinds (Hunter Pet - Nether Ray)
-			id == 264667 or -- Primal Rage (Hunter Pet - Ferocity)
-			id == 178207 or -- Drums of Fury (Leatherworking)
-			id == 146555 or -- Drums of Rage (Leatherworking)
-			id == 230935 or -- Drums of the Mountain (Leatherworking)
-			id == 256740    -- Drums of the Maelstrom (Leatherworking)
-		) then
-			return true
-		end
-	end
-end
-
 -- End Helpful Functions
 
 -- Start Ability Modifications
 
-function Ability:cost()
-	if DeadlyCalm:up() then
-		return 0
-	end
-	return self.rage_cost
-end
-
 function Execute:cost()
-	if SuddenDeath:up() then
-		return 0
-	end
-	return max(min(40, Player.rage), self.rage_cost)
+	return max(10, Player.rage)
 end
 
 function Execute:usable()
-	if not SuddenDeath:up() and Target.healthPercentage >= (Massacre.known and 35 or 20) then
+	if Target.healthPercentage >= 20 then
 		return false
 	end
 	return Ability.usable(self)
 end
 
-function VictoryRush:usable()
-	if Victorious:down() then
+function Charge:usable()
+	if InCombatLockdown() then
+		return false
+	end
+	return Ability.usable(self)
+end
+
+function Overpower:usable()
+	if not Overpower.activation_time or (Player.time - Overpower.activation_time) > 5 then
 		return false
 	end
 	return Ability.usable(self)
@@ -1085,334 +913,86 @@ end
 -- Begin Action Priority Lists
 
 local APL = {
-	[SPEC.NONE] = {
+	[STANCE.NONE] = {
 		main = function() end
 	},
-	[SPEC.ARMS] = {},
-	[SPEC.FURY] = {},
-	[SPEC.PROTECTION] = {},
+	[STANCE.BATTLE] = {},
+	[STANCE.DEFENSIVE] = {},
+	[STANCE.BERSERKER] = {},
 }
 
-APL[SPEC.ARMS].main = function(self)
+APL[STANCE.BATTLE].main = function(self)
 	if TimeInCombat() == 0 then
-		if BattleShout:usable() and BattleShout:remains() < 300 then
+		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
-		if Opt.pot and Target.boss then
-			if GreaterFlaskOfTheUndertow:usable() and GreaterFlaskOfTheUndertow.buff:remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheUndertow)
-			end
-			if SuperiorBattlePotionOfStrength:usable() then
-				UseCooldown(SuperiorBattlePotionOfStrength)
-			end
-		end
 		if Charge:usable() then
-			UseExtra(Charge)
+			UseCooldown(Charge)
 		end
 	else
-		if BattleShout:usable() and BattleShout:remains() < 30 then
+		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
 		end
 	end
---[[
-actions=charge
-actions+=/auto_attack
-actions+=/potion
-actions+=/blood_fury,if=debuff.colossus_smash.up
-actions+=/berserking,if=debuff.colossus_smash.up
-actions+=/arcane_torrent,if=debuff.colossus_smash.down&cooldown.mortal_strike.remains>1.5&rage<50
-actions+=/lights_judgment,if=debuff.colossus_smash.down
-actions+=/fireblood,if=debuff.colossus_smash.up
-actions+=/ancestral_call,if=debuff.colossus_smash.up
-actions+=/avatar,if=cooldown.colossus_smash.remains<8|(talent.warbreaker.enabled&cooldown.warbreaker.remains<8)
-actions+=/sweeping_strikes,if=spell_targets.whirlwind>1&(cooldown.bladestorm.remains>10|cooldown.colossus_smash.remains>8|azerite.test_of_might.enabled)
-actions+=/run_action_list,name=hac,if=raid_event.adds.exists
-actions+=/run_action_list,name=five_target,if=spell_targets.whirlwind>4
-actions+=/run_action_list,name=execute,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
-actions+=/run_action_list,name=single_target
-]]
-	if LightsJudgment:usable() and ColossusSmash:down() and Target.timeToDie > 4 then
-		UseExtra(LightsJudgment)
-	end
-	if Avatar:usable() and (ColossusSmash:remains() < 8 or (Warbreaker.known and Warbreaker:ready(8))) then
-		UseCooldown(Avatar)
-	end
-	if SweepingStrikes:ready() and Enemies() > 1 and (not Bladestorm:ready(10) or not ColossusSmash:ready(8) or TestOfMight.known) then
-		UseCooldown(SweepingStrikes)
-	end
-	if Enemies() >= 5 then
-		return self:five_target()
-	end
---	if Enemies() >= 3 then
---		return self:hac()
---	end
-	if Target.healthPercentage < (Massacre.known and 35 or 20) then
-		return self:execute()
-	end
-	return self:single_target()
-end
-
-APL[SPEC.ARMS].execute = function(self)
---[[
-actions.execute=skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
-actions.execute+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
-actions.execute+=/colossus_smash,if=debuff.colossus_smash.down
-actions.execute+=/warbreaker,if=debuff.colossus_smash.down
-actions.execute+=/deadly_calm
-actions.execute+=/bladestorm,if=rage<30&!buff.deadly_calm.up
-actions.execute+=/cleave,if=spell_targets.whirlwind>2
-actions.execute+=/slam,if=buff.crushing_assault.up
-actions.execute+=/mortal_strike,if=buff.overpower.stack=2&talent.dreadnaught.enabled|buff.executioners_precision.stack=2
-actions.execute+=/execute,if=buff.deadly_calm.up
-actions.execute+=/overpower
-actions.execute+=/execute
-]]
-	if Skullsplitter:usable() and Player.rage < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
-		return Skullsplitter
-	end
-	if Ravager:usable() and not DeadlyCalm:up() and (ColossusSmash:ready(2) or (Warbreaker.known and Warbreaker:ready(2))) then
-		UseCooldown(Ravager)
-	end
-	if ColossusSmash:usable() and ColossusSmash:down() then
-		return ColossusSmash
-	end
-	if Warbreaker:usable() and ColossusSmash:down() then
-		return Warbreaker
-	end
-	if DeadlyCalm:usable() then
-		UseCooldown(DeadlyCalm)
-	end
-	if Bladestorm:usable() and Player.rage < 30 and not DeadlyCalm:up() then
-		UseCooldown(Bladestorm)
-	end
-	if Cleave:usable() and Enemies() > 2 then
-		return Cleave
-	end
-	if CrushingAssault.known and Slam:usable() and CrushingAssault:up() then
-		return Slam
-	end
-	if MortalStrike:usable() and (Dreadnaught.known and Overpower:stack() == 2 or ExecutionersPrecision.known and ExecutionersPrecision:stack() == 2) then
-		return MortalStrike
-	end
-	if Execute:usable() and DeadlyCalm:up() then
-		return Execute
-	end
-	if Overpower:usable() then
-		return Overpower
-	end
-	if Execute:usable() then
-		return Execute
-	end
-	if VictoryRush:usable() then
-		return VictoryRush
-	end
-end
-
-APL[SPEC.ARMS].five_target = function(self)
---[[
-actions.five_target=skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
-actions.five_target+=/ravager,if=(!talent.warbreaker.enabled|cooldown.warbreaker.remains<2)
-actions.five_target+=/colossus_smash,if=debuff.colossus_smash.down
-actions.five_target+=/warbreaker,if=debuff.colossus_smash.down
-actions.five_target+=/bladestorm,if=buff.sweeping_strikes.down&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.remains>4.5&!azerite.test_of_might.enabled)|buff.test_of_might.up)
-actions.five_target+=/deadly_calm
-actions.five_target+=/cleave
-actions.five_target+=/execute,if=(!talent.cleave.enabled&dot.deep_wounds.remains<2)|(buff.sudden_death.react|buff.stone_heart.react)&(buff.sweeping_strikes.up|cooldown.sweeping_strikes.remains>8)
-actions.five_target+=/mortal_strike,if=(!talent.cleave.enabled&dot.deep_wounds.remains<2)|buff.sweeping_strikes.up&buff.overpower.stack=2&(talent.dreadnaught.enabled|buff.executioners_precision.stack=2)
-actions.five_target+=/whirlwind,if=debuff.colossus_smash.up|(buff.crushing_assault.up&talent.fervor_of_battle.enabled)
-actions.five_target+=/whirlwind,if=buff.deadly_calm.up|rage>60
-actions.five_target+=/overpower
-actions.five_target+=/whirlwind
-]]
-	if Skullsplitter:usable() and Player.rage < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
-		return Skullsplitter
-	end
-	if Ravager:usable() and (not Warbreaker.known or Warbreaker:ready(2)) then
-		UseCooldown(Ravager)
-	end
-	if ColossusSmash:usable() and ColossusSmash:down() then
-		return ColossusSmash
-	end
-	if Warbreaker:usable() and ColossusSmash:down() then
-		return Warbreaker
-	end
-	if Bladestorm:usable() and SweepingStrikes:down() and (not DeadlyCalm.known or DeadlyCalm:down()) and ((not TestOfMight.known and ColossusSmash:remains() > 4.5) or TestOfMight:up()) then
-		UseCooldown(Bladestorm)
-	end
-	if DeadlyCalm:usable() then
-		UseCooldown(DeadlyCalm)
-	end
-	if Cleave:usable() then
-		return Cleave
-	end
-	if Execute:usable() and ((not Cleave.known and DeepWounds:remains() < 2) or SuddenDeath:up() and (SweepingStrikes:up() or not SweepingStrikes:ready(8))) then
-		return Execute
-	end
-	if MortalStrike:usable() and ((not Cleave.known and DeepWounds:remains() < 2) or SweepingStrikes:up() and Overpower:stack() == 2 and (Dreadnaught.known or ExecutionersPrecision:stack() == 2)) then
-		return MortalStrike
-	end
-	if Whirlwind:usable() then
-		if ColossusSmash:up() or (CrushingAssault.known and FervorOfBattle.known and CrushingAssault:up()) then
-			return Whirlwind
-		end
-		if DeadlyCalm:up() or Player.rage > 60 then
-			return Whirlwind
-		end
-	end
-	if Overpower:usable() then
-		return Overpower
-	end
-	if Whirlwind:usable() then
-		return Whirlwind
-	end
-	if VictoryRush:usable() then
-		return VictoryRush
-	end
-end
-
-APL[SPEC.ARMS].hac = function(self)
---[[
-actions.hac=rend,if=remains<=duration*0.3&(!raid_event.adds.up|buff.sweeping_strikes.up)
-actions.hac+=/skullsplitter,if=rage<60&(cooldown.deadly_calm.remains>3|!talent.deadly_calm.enabled)
-actions.hac+=/deadly_calm,if=(cooldown.bladestorm.remains>6|talent.ravager.enabled&cooldown.ravager.remains>6)&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
-actions.hac+=/ravager,if=(raid_event.adds.up|raid_event.adds.in>target.time_to_die)&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
-actions.hac+=/colossus_smash,if=raid_event.adds.up|raid_event.adds.in>40|(raid_event.adds.in>20&talent.anger_management.enabled)
-actions.hac+=/warbreaker,if=raid_event.adds.up|raid_event.adds.in>40|(raid_event.adds.in>20&talent.anger_management.enabled)
-actions.hac+=/bladestorm,if=(debuff.colossus_smash.up&raid_event.adds.in>target.time_to_die)|raid_event.adds.up&((debuff.colossus_smash.remains>4.5&!azerite.test_of_might.enabled)|buff.test_of_might.up)
-actions.hac+=/overpower,if=!raid_event.adds.up|(raid_event.adds.up&azerite.seismic_wave.enabled)
-actions.hac+=/cleave,if=spell_targets.whirlwind>2
-actions.hac+=/execute,if=!raid_event.adds.up|(!talent.cleave.enabled&dot.deep_wounds.remains<2)|buff.sudden_death.react
-actions.hac+=/mortal_strike,if=!raid_event.adds.up|(!talent.cleave.enabled&dot.deep_wounds.remains<2)
-actions.hac+=/whirlwind,if=raid_event.adds.up
-actions.hac+=/overpower
-actions.hac+=/whirlwind,if=talent.fervor_of_battle.enabled
-actions.hac+=/slam,if=!talent.fervor_of_battle.enabled&!raid_event.adds.up
-]]
-
-end
-
-APL[SPEC.ARMS].single_target = function(self)
---[[
-actions.single_target=rend,if=!remains&debuff.colossus_smash.down
-actions.single_target+=/skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
-actions.single_target+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
-actions.single_target+=/colossus_smash,if=debuff.colossus_smash.down
-actions.single_target+=/warbreaker,if=debuff.colossus_smash.down
-actions.single_target+=/deadly_calm
-actions.single_target+=/execute,if=buff.sudden_death.react
-actions.single_target+=/rend,if=refreshable&cooldown.colossus_smash.remains<5
-actions.single_target+=/bladestorm,if=cooldown.mortal_strike.remains&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.up&!azerite.test_of_might.enabled)|buff.test_of_might.up)
-actions.single_target+=/cleave,if=spell_targets.whirlwind>2
-actions.single_target+=/overpower,if=azerite.seismic_wave.rank=3
-actions.single_target+=/mortal_strike
-actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(buff.deadly_calm.up|rage>=60)
-actions.single_target+=/overpower
-actions.single_target+=/rend,target_if=min:remains,if=refreshable&debuff.colossus_smash.down
-actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5&(!azerite.test_of_might.enabled|debuff.colossus_smash.up)
-actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5
-]]
-	if Rend:usable() and Rend:down() and ColossusSmash:down() then
-		return Rend
-	end
-	if Skullsplitter:usable() and Player.rage < 60 and (not DeadlyCalm.known or DeadlyCalm:down()) then
-		return Skullsplitter
-	end
-	if Ravager:usable() and not DeadlyCalm:up() and (ColossusSmash:ready(2) or (Warbreaker.known and Warbreaker:ready(2))) then
-		UseCooldown(Ravager)
-	end
-	if ColossusSmash:usable() and ColossusSmash:down() then
-		return ColossusSmash
-	end
-	if Warbreaker:usable() and ColossusSmash:down() then
-		return Warbreaker
-	end
-	if DeadlyCalm:usable() then
-		UseCooldown(DeadlyCalm)
-	end
-	if SuddenDeath.known and Execute:usable() and SuddenDeath:up() then
-		return Execute
-	end
-	if Rend:usable() and Rend:refreshable() and ColossusSmash:cooldown() < 5 then
-		return Rend
-	end
-	if Bladestorm:usable() and not MortalStrike:ready() and (not DeadlyCalm.known or DeadlyCalm:down()) and ((not TestOfMight.known and ColossusSmash:up()) or TestOfMight:up()) then
-		UseCooldown(Bladestorm)
-	end
-	if Cleave:usable() and Enemies() > 2 then
-		return Cleave
+	if BloodFury:usable() then
+		UseCooldown(BloodFury)
 	end
 	if MortalStrike:usable() then
 		return MortalStrike
 	end
-	if FervorOfBattle.known and Whirlwind:usable() and (DeadlyCalm:up() or Player.rage >= 60) then
-		return Whirlwind
-	end
 	if Overpower:usable() then
 		return Overpower
 	end
-	if Rend:usable() and Rend:refreshable() and ColossusSmash:down() then
+	if Rend:usable() and Rend:down() and Target.timeToDie > 4 then
 		return Rend
 	end
-	if MortalStrike:ready(0.5) then
-		return MortalStrike
-	end
-	if FervorOfBattle.known then
-		if Whirlwind:usable() and (not TestOfMight.known or ColossusSmash:up()) then
-			return Whirlwind
-		end
-	else
-		if Slam:usable() then
-			return Slam
-		end
-	end
-	if VictoryRush:usable() then
-		return VictoryRush
+	if HeroicStrike:usable() and Player.rage >= 30 then
+		return HeroicStrike
 	end
 end
 
-APL[SPEC.FURY].main = function(self)
+APL[STANCE.DEFENSIVE].main = function(self)
 	if TimeInCombat() == 0 then
-		if BattleShout:usable() and BattleShout:remains() < 300 then
+		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
-		if Opt.pot and Target.boss then
-			if GreaterFlaskOfTheUndertow:usable() and GreaterFlaskOfTheUndertow.buff:remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheUndertow)
-			end
-			if SuperiorBattlePotionOfStrength:usable() then
-				UseCooldown(SuperiorBattlePotionOfStrength)
-			end
+		if Charge:usable() then
+			UseCooldown(Charge)
 		end
 	else
-		if BattleShout:usable() and BattleShout:remains() < 30 then
+		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
 		end
 	end
+	if BloodFury:usable() then
+		UseCooldown(BloodFury)
+	end
 end
 
-APL[SPEC.PROTECTION].main = function(self)
+APL[STANCE.BERSERKER].main = function(self)
 	if TimeInCombat() == 0 then
-		if BattleShout:usable() and BattleShout:remains() < 300 then
+		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
-		if Opt.pot and Target.boss then
-			if GreaterFlaskOfTheUndertow:usable() and GreaterFlaskOfTheUndertow.buff:remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheUndertow)
-			end
-			if SuperiorBattlePotionOfStrength:usable() then
-				UseCooldown(SuperiorBattlePotionOfStrength)
-			end
+		if Charge:usable() then
+			UseCooldown(Charge)
 		end
 	else
-		if BattleShout:usable() and BattleShout:remains() < 30 then
+		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
 		end
+	end
+	if BloodFury:usable() then
+		UseCooldown(BloodFury)
 	end
 end
 
 APL.Interrupt = function(self)
 	if Pummel:usable() then
 		return Pummel
+	end
+	if ShieldBash:usable() then
+		return ShieldBash
 	end
 end
 
@@ -1541,10 +1121,10 @@ function events:ACTIONBAR_SLOT_CHANGED()
 end
 
 local function ShouldHide()
-	return (Player.spec == SPEC.NONE or
-		   (Player.spec == SPEC.ARMS and Opt.hide.arms) or
-		   (Player.spec == SPEC.FURY and Opt.hide.fury) or
-		   (Player.spec == SPEC.PROTECTION and Opt.hide.protection))
+	return (Player.stance == STANCE.NONE or
+		   (Player.stance == STANCE.BATTLE and Opt.hide.battle) or
+		   (Player.stance == STANCE.DEFENSIVE and Opt.hide.defensive) or
+		   (Player.stance == STANCE.BERSERKER and Opt.hide.berserker))
 end
 
 local function Disappear()
@@ -1629,32 +1209,12 @@ local resourceAnchor = {}
 
 local ResourceFramePoints = {
 	['blizzard'] = {
-		[SPEC.ARMS] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 49 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -12 }
-		},
-		[SPEC.FURY] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 49 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -12 }
-		},
-		[SPEC.PROTECTION] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 49 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -12 }
-		}
+		['above'] = { 'BOTTOM', 'TOP', 0, 49 },
+		['below'] = { 'TOP', 'BOTTOM', 0, -12 }
 	},
 	['kui'] = {
-		[SPEC.ARMS] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 6 }
-		},
-		[SPEC.FURY] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 6 }
-		},
-		[SPEC.PROTECTION] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 6 }
-		}
+		['above'] = { 'BOTTOM', 'TOP', 0, 28 },
+		['below'] = { 'TOP', 'BOTTOM', 0, 6 }
 	},
 }
 
@@ -1667,7 +1227,7 @@ end
 local function OnResourceFrameShow()
 	if Opt.snap then
 		smashPanel:ClearAllPoints()
-		local p = ResourceFramePoints[resourceAnchor.name][Player.spec][Opt.snap]
+		local p = ResourceFramePoints[resourceAnchor.name][Opt.snap]
 		smashPanel:SetPoint(p[1], resourceAnchor.frame, p[2], p[3], p[4])
 		SnapAllPanels()
 	end
@@ -1694,7 +1254,7 @@ local function UpdateTargetHealth()
 	Target.health = UnitHealth('target')
 	table.remove(Target.healthArray, 1)
 	Target.healthArray[15] = Target.health
-	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 15
+	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 30
 	Target.healthPercentage = Target.healthMax > 0 and (Target.health / Target.healthMax * 100) or 100
 	Target.healthLostPerSec = (Target.healthArray[1] - Target.health) / 3
 	Target.timeToDie = Target.healthLostPerSec > 0 and min(Target.timeToDieMax, Target.health / Target.healthLostPerSec) or Target.timeToDieMax
@@ -1709,16 +1269,14 @@ local function UpdateDisplay()
 		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
 	end
 	if Opt.swing_timer then
-		if Player.main and Player.main:cost() <= Player.rage then
-			smashPanel.text:Hide()
+		local next_swing
+		if Player.equipped_oh then
+			next_swing = min(Player.next_swing_mh, Player.next_swing_oh)
 		else
-			local next_swing
-			if Player.equipped_oh then
-				next_swing = min(Player.next_swing_mh, Player.next_swing_oh)
-			else
-				next_swing = Player.next_swing_mh
-			end
-			text_tr = format('%.1f', max(0, next_swing - Player.time))
+			next_swing = Player.next_swing_mh
+		end
+		if (next_swing - Player.time) > 0 then
+			text_tr = format('%.1f', next_swing - Player.time)
 		end
 	end
 	smashPanel.dimmer:SetShown(dim)
@@ -1728,7 +1286,7 @@ end
 
 local function UpdateCombat()
 	timer.combat = 0
-	local _, start, duration, remains, spellId
+	local _, start, duration, remains, spellName
 	Player.ctime = GetTime()
 	Player.time = Player.ctime - Player.time_diff
 	Player.last_main = Player.main
@@ -1737,13 +1295,11 @@ local function UpdateCombat()
 	Player.main =  nil
 	Player.cd = nil
 	Player.extra = nil
-	start, duration = GetSpellCooldown(61304)
+	start, duration = GetSpellCooldown(BattleShout.spellId)
 	Player.gcd_remains = start > 0 and duration - (Player.ctime - start) or 0
-	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
-	Player.ability_casting = abilities.bySpellId[spellId]
+	_, _, _, _, remains, _, _, spellName = CastingInfo()
+	Player.ability_casting = abilities.bySpellName[spellName]
 	Player.execute_remains = max(remains and (remains / 1000 - Player.ctime) or 0, Player.gcd_remains)
-	Player.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
-	Player.gcd = 1.5 * Player.haste_factor
 	Player.health = UnitHealth('player')
 	Player.health_max = UnitHealthMax('player')
 	Player.rage = UnitPower('player', 1)
@@ -1758,7 +1314,7 @@ local function UpdateCombat()
 		autoAoe:purge()
 	end
 
-	Player.main = APL[Player.spec]:main()
+	Player.main = APL[Player.stance]:main()
 	if Player.main ~= Player.last_main then
 		if Player.main then
 			smashPanel.icon:SetTexture(Player.main.icon)
@@ -1794,12 +1350,12 @@ end
 function events:SPELL_UPDATE_COOLDOWN()
 	if Opt.spell_swipe then
 		local start, duration
-		local _, _, _, castStart, castEnd = UnitCastingInfo('player')
+		local _, _, _, castStart, castEnd = CastingInfo()
 		if castStart then
 			start = castStart / 1000
 			duration = (castEnd - castStart) / 1000
 		else
-			start, duration = GetSpellCooldown(61304)
+			start, duration = GetSpellCooldown(BattleShout.spellId)
 		end
 		smashPanel.swipe:SetCooldown(start, duration)
 	end
@@ -1836,75 +1392,107 @@ function events:ADDON_LOADED(name)
 		print('[|cFFFFD000Warning|r] Smash is not designed for players under level 110, and almost certainly will not operate properly!')
 	end
 	InitializeOpts()
-	Azerite:initialize()
 	UpdateDraggable()
 	UpdateAlpha()
 	UpdateScale()
 	SnapAllPanels()
 end
 
-function events:COMBAT_LOG_EVENT_UNFILTERED()
-	local timeStamp, eventType, _, srcGUID, _, _, _, dstGUID, _, _, _, spellId, spellName, _, missType = CombatLogGetCurrentEventInfo()
+local CombatEvent = {}
+
+
+CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _, _, _, ...)
 	Player.time = timeStamp
 	Player.ctime = GetTime()
 	Player.time_diff = Player.ctime - Player.time
+	local e = event
+	if (
+	   e == 'UNIT_DESTROYED' or
+	   e == 'UNIT_DISSIPATES' or
+	   e == 'SPELL_INSTAKILL' or
+	   e == 'PARTY_KILL')
+	then
+		e = 'UNIT_DIED'
+	elseif (
+	   e == 'SPELL_CAST_START' or
+	   e == 'SPELL_CAST_SUCCESS' or
+	   e == 'SPELL_CAST_FAILED' or
+	   e == 'SPELL_AURA_REMOVED' or
+	   e == 'SPELL_DAMAGE' or
+	   e == 'SPELL_PERIODIC_DAMAGE' or
+	   e == 'SPELL_MISSED' or
+	   e == 'SPELL_AURA_APPLIED' or
+	   e == 'SPELL_AURA_REFRESH' or
+	   e == 'SPELL_AURA_REMOVED')
+	then
+		e = 'SPELL'
+	end
+	if CombatEvent[e] then
+		return CombatEvent[e](event, srcGUID, dstGUID, ...)
+	end
+end
 
-	if eventType == 'UNIT_DIED' or eventType == 'UNIT_DESTROYED' or eventType == 'UNIT_DISSIPATES' or eventType == 'SPELL_INSTAKILL' or eventType == 'PARTY_KILL' then
-		trackAuras:remove(dstGUID)
-		if Opt.auto_aoe then
-			autoAoe:remove(dstGUID)
+CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
+	trackAuras:remove(dstGUID)
+	if Opt.auto_aoe then
+		autoAoe:remove(dstGUID)
+	end
+end
+
+CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, school, resisted, blocked, absorbed, critical, glancing, crushing, offHand)
+	if Opt.auto_aoe then
+		if dstGUID == Player.guid then
+			autoAoe:add(srcGUID, true)
+		elseif srcGUID == Player.guid then
+			autoAoe:add(dstGUID, true)
 		end
 	end
-	if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
-		if Opt.auto_aoe then
-			if dstGUID == Player.guid then
-				autoAoe:add(srcGUID, true)
-			elseif srcGUID == Player.guid and not (missType == 'EVADE' or missType == 'IMMUNE') then
-				autoAoe:add(dstGUID, true)
-			end
+	if Opt.swing_timer and srcGUID == Player.guid then
+		local mh, oh = UnitAttackSpeed('player')
+		if offHand and oh then
+			Player.next_swing_oh = Player.time + oh
+		else
+			Player.next_swing_mh = Player.time + mh
 		end
-		if Opt.swing_timer and srcGUID == Player.guid then
-			local mh, oh = UnitAttackSpeed('player')
-			if offHand and oh then
-				Player.next_swing_oh = timeStamp + oh
-			else
-				Player.next_swing_mh = timeStamp + mh
-			end
-			if eventType == 'SWING_MISSED' then
-				smashPanel.text.tr:SetTextColor(1, 0, 0, 1)
-			else
-				smashPanel.text.tr:SetTextColor(1, 1, 1, 1)
-			end
+		smashPanel.text.tr:SetTextColor(1, 1, 1, 1)
+	end
+end
+
+CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, amountMissed)
+	if Opt.auto_aoe then
+		if dstGUID == Player.guid then
+			autoAoe:add(srcGUID, true)
+		elseif srcGUID == Player.guid and not (missType == 'EVADE' or missType == 'IMMUNE') then
+			autoAoe:add(dstGUID, true)
 		end
 	end
+	if Opt.swing_timer and srcGUID == Player.guid then
+		local mh, oh = UnitAttackSpeed('player')
+		if offHand and oh then
+			Player.next_swing_oh = Player.time + oh
+		else
+			Player.next_swing_mh = Player.time + mh
+		end
+		smashPanel.text.tr:SetTextColor(1, 0, 0, 1)
+	end
+	if Overpower.known and srcGUID == Player.guid and dstGUID == Target.guid and missType == 'DODGE' then
+		Overpower.activation_time = Player.time
+	end
+end
 
+CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool, missType)
 	if srcGUID ~= Player.guid then
 		return
 	end
 
-	local ability = spellId and abilities.bySpellId[spellId]
+	local ability = spellName and abilities.bySpellName[spellName]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
-		return
-	end
-
-	if not (
-	   eventType == 'SPELL_CAST_START' or
-	   eventType == 'SPELL_CAST_SUCCESS' or
-	   eventType == 'SPELL_CAST_FAILED' or
-	   eventType == 'SPELL_AURA_REMOVED' or
-	   eventType == 'SPELL_DAMAGE' or
-	   eventType == 'SPELL_PERIODIC_DAMAGE' or
-	   eventType == 'SPELL_MISSED' or
-	   eventType == 'SPELL_AURA_APPLIED' or
-	   eventType == 'SPELL_AURA_REFRESH' or
-	   eventType == 'SPELL_AURA_REMOVED')
-	then
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s', event, spellName))
 		return
 	end
 
 	UpdateCombatWithin(0.05)
-	if eventType == 'SPELL_CAST_SUCCESS' then
+	if event == 'SPELL_CAST_SUCCESS' then
 		if srcGUID == Player.guid or ability.player_triggered then
 			Player.last_ability = ability
 			if ability.triggers_gcd then
@@ -1924,26 +1512,30 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		return -- ignore buffs beyond here
 	end
 	if ability.aura_targets then
-		if eventType == 'SPELL_AURA_APPLIED' then
+		if event == 'SPELL_AURA_APPLIED' then
 			ability:applyAura(dstGUID)
-		elseif eventType == 'SPELL_AURA_REFRESH' then
+		elseif event == 'SPELL_AURA_REFRESH' then
 			ability:refreshAura(dstGUID)
-		elseif eventType == 'SPELL_AURA_REMOVED' then
+		elseif event == 'SPELL_AURA_REMOVED' then
 			ability:removeAura(dstGUID)
 		end
 	end
 	if Opt.auto_aoe then
-		if eventType == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
+		if event == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
 			autoAoe:remove(dstGUID)
-		elseif ability.auto_aoe and eventType == ability.auto_aoe.trigger then
+		elseif ability.auto_aoe and event == ability.auto_aoe.trigger then
 			ability:recordTargetHit(dstGUID)
 		end
 	end
-	if eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
-		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
+	if event == 'SPELL_MISSED' or event == 'SPELL_DAMAGE' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
+		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
 			smashPreviousPanel.border:SetTexture('Interface\\AddOns\\Smash\\misseffect.blp')
 		end
 	end
+end
+
+function events:COMBAT_LOG_EVENT_UNFILTERED()
+	CombatEvent.TRIGGER(CombatLogGetCurrentEventInfo())
 end
 
 local function UpdateTargetInfo()
@@ -1982,6 +1574,7 @@ local function UpdateTargetInfo()
 		for i = 1, 15 do
 			Target.healthArray[i] = UnitHealth('target')
 		end
+		Overpower.activation_time = nil
 	end
 	Target.boss = false
 	Target.stunnable = true
@@ -2054,39 +1647,24 @@ end
 local function UpdateAbilityData()
 	Player.rage_max = UnitPowerMax('player', 1)
 
-	local _, ability
+	local _, ability, spellId
 	for _, ability in next, abilities.all do
-		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 		ability.known = false
-		if IsPlayerSpell(ability.spellId) or (ability.spellId2 and IsPlayerSpell(ability.spellId2)) then
-			ability.known = true
-		elseif Azerite.traits[ability.spellId] then
-			ability.known = true
-		elseif ability.essence_id and Azerite.essences[ability.essence_id] then
-			if ability.essence_major then
-				ability.known = Azerite.essences[ability.essence_id].major
-			else
+		for _, spellId in next, ability.spellIds do
+			if IsPlayerSpell(spellId) then
+				ability.spellId = spellId -- update spellId to current rank
 				ability.known = true
 			end
 		end
+		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 	end
 
-	if Warbreaker.known then
-		ColosussSmash.known = false
-	end
-	if Ravager.known then
-		Bladestorm.known = false
-	end
-
-	abilities.bySpellId = {}
+	abilities.bySpellName = {}
 	abilities.autoAoe = {}
 	abilities.trackAuras = {}
 	for _, ability in next, abilities.all do
 		if ability.known then
-			abilities.bySpellId[ability.spellId] = ability
-			if ability.spellId2 then
-				abilities.bySpellId[ability.spellId2] = ability
-			end
+			abilities.bySpellName[ability.name] = ability
 			if ability.auto_aoe then
 				abilities.autoAoe[#abilities.autoAoe + 1] = ability
 			end
@@ -2124,29 +1702,13 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 			inventoryItems[i].can_use = false
 		end
 	end
-	Azerite:update()
-	UpdateAbilityData()
 end
 
-function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
+function events:UPDATE_SHAPESHIFT_FORM(unitName)
 	if unitName ~= 'player' then
 		return
 	end
-	Player.spec = GetSpecialization() or 0
-	smashPreviousPanel.ability = nil
-	SetTargetMode(1)
-	UpdateTargetInfo()
-	events:PLAYER_EQUIPMENT_CHANGED()
-	events:PLAYER_REGEN_ENABLED()
-	InnerDemons.next_imp = nil
-end
-
-function events:PLAYER_PVP_TALENT_UPDATE()
-	UpdateAbilityData()
-end
-
-function events:AZERITE_ESSENCE_UPDATE()
-	Azerite:update()
+	Player.stance = GetShapeshiftForm()
 	UpdateAbilityData()
 end
 
@@ -2158,7 +1720,8 @@ function events:PLAYER_ENTERING_WORLD()
 	local _
 	_, Player.instance = IsInInstance()
 	Player.guid = UnitGUID('player')
-	events:PLAYER_SPECIALIZATION_CHANGED('player')
+	events:UPDATE_SHAPESHIFT_FORM('player')
+	events:PLAYER_EQUIPMENT_CHANGED()
 end
 
 smashPanel.button:SetScript('OnClick', function(self, button, down)
@@ -2400,25 +1963,25 @@ function SlashCmdList.Smash(msg, editbox)
 		end
 		return Status('Only use cooldowns on bosses', Opt.boss_only)
 	end
-	if msg[1] == 'hidespec' or startsWith(msg[1], 'spec') then
+	if msg[1] == 'hidestance' or startsWith(msg[1], 'stance') then
 		if msg[2] then
-			if startsWith(msg[2], 'a') then
-				Opt.hide.arms = not Opt.hide.arms
-				events:PLAYER_SPECIALIZATION_CHANGED('player')
-				return Status('Arms specialization', not Opt.hide.arms)
+			if startsWith(msg[2], 'b') then
+				Opt.hide.battle = not Opt.hide.battle
+				events:UPDATE_SHAPESHIFT_FORM('player')
+				return Status('Battle stance', not Opt.hide.battle)
 			end
-			if startsWith(msg[2], 'f') then
-				Opt.hide.fury = not Opt.hide.fury
-				events:PLAYER_SPECIALIZATION_CHANGED('player')
-				return Status('Fury specialization', not Opt.hide.fury)
+			if startsWith(msg[2], 'd') then
+				Opt.hide.defensive = not Opt.hide.defensive
+				events:UPDATE_SHAPESHIFT_FORM('player')
+				return Status('Defensive stance', not Opt.hide.defensive)
 			end
-			if startsWith(msg[2], 'p') then
-				Opt.hide.protection = not Opt.hide.protection
-				events:PLAYER_SPECIALIZATION_CHANGED('player')
-				return Status('Protection specialization', not Opt.hide.protection)
+			if startsWith(msg[2], 'b') then
+				Opt.hide.berserker = not Opt.hide.berserker
+				events:UPDATE_SHAPESHIFT_FORM('player')
+				return Status('Berserker stance', not Opt.hide.berserker)
 			end
 		end
-		return Status('Possible hidespec options', '|cFFFFD000arms|r/|cFFFFD000fury|r/|cFFFFD000protection|r')
+		return Status('Possible hidestance options', '|cFFFFD000battle|r/|cFFFFD000defensive|r/|cFFFFD000berserker|r')
 	end
 	if startsWith(msg[1], 'int') then
 		if msg[2] then
@@ -2437,12 +2000,6 @@ function SlashCmdList.Smash(msg, editbox)
 			Opt.auto_aoe_ttl = tonumber(msg[2]) or 10
 		end
 		return Status('Length of time target exists in auto AoE after being hit', Opt.auto_aoe_ttl, 'seconds')
-	end
-	if startsWith(msg[1], 'pot') then
-		if msg[2] then
-			Opt.pot = msg[2] == 'on'
-		end
-		return Status('Show flasks and battle potions in cooldown UI', Opt.pot)
 	end
 	if startsWith(msg[1], 'tri') then
 		if msg[2] then
@@ -2480,11 +2037,10 @@ function SlashCmdList.Smash(msg, editbox)
 		'miss |cFF00C000on|r/|cFFC00000off|r - red border around previous ability when it fails to hit',
 		'aoe |cFF00C000on|r/|cFFC00000off|r - allow clicking main ability icon to toggle amount of targets (disables moving)',
 		'bossonly |cFF00C000on|r/|cFFC00000off|r - only use cooldowns on bosses',
-		'hidespec |cFFFFD000arms|r/|cFFFFD000fury|r/|cFFFFD000protection|r - toggle disabling Smash for specializations',
+		'hidestance |cFFFFD000battle|r/|cFFFFD000defensive|r/|cFFFFD000berserker|r - toggle disabling Smash for stances',
 		'interrupt |cFF00C000on|r/|cFFC00000off|r - show an icon for interruptable spells',
 		'auto |cFF00C000on|r/|cFFC00000off|r  - automatically change target mode on AoE spells',
 		'ttl |cFFFFD000[seconds]|r  - time target exists in auto AoE after being hit (default is 10 seconds)',
-		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing when rage starved',
 		'|cFFFFD000reset|r - reset the location of the Smash UI to default',

@@ -1308,6 +1308,8 @@ end
 local function UpdateDisplay()
 	timer.display = 0
 	local dim, text_tl, text_tr
+	Player.ctime = GetTime()
+	Player.time = Player.ctime - Player.time_diff
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or

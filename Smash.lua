@@ -390,6 +390,7 @@ function Ability.add(spellIds, buff, player)
 		buff_duration = 0,
 		tick_interval = 0,
 		last_used = 0,
+		is_buff = buff,
 		auraTarget = buff and 'player' or 'target',
 		auraFilter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
 	}
@@ -427,6 +428,9 @@ function Ability:usable()
 end
 
 function Ability:remains()
+	if not is_buff and self.aura_targets and self.aura_targets[Target.guid] then
+		return max(aura.expires - Player.time - Player.execute_remains, 0)
+	end
 	local _, i, id, expires
 	for i = 1, 16 do
 		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
@@ -441,13 +445,6 @@ function Ability:remains()
 		end
 	end
 	return 0
-end
-
-function Ability:refreshable()
-	if self.buff_duration > 0 then
-		return self:remains() < self:duration() * 0.3
-	end
-	return self:down()
 end
 
 function Ability:up()
@@ -692,6 +689,7 @@ Overpower.rage_cost = 5
 local Rend = Ability.add({772, 6546, 6547, 6548, 11572, 11573, 11574}, false, true)
 Rend.rage_cost = 10
 Rend.buff_duration = 15
+Rend:trackAuras()
 local Slam = Ability.add({1464, 8820, 11604, 11605}, false, true)
 Slam.rage_cost = 15
 local Whirlwind = Ability.add({1680}, false, true)
@@ -926,6 +924,9 @@ APL[STANCE.BATTLE].main = function(self)
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
+		if Bloodrage:usable() then
+			UseCooldown(Bloodrage)
+		end
 		if Charge:usable() then
 			UseCooldown(Charge)
 		end
@@ -948,6 +949,9 @@ APL[STANCE.BATTLE].main = function(self)
 	end
 	if HeroicStrike:usable() and Player.rage >= 30 then
 		return HeroicStrike
+	end
+	if Bloodrage:usable() then
+		UseCooldown(Bloodrage)
 	end
 end
 

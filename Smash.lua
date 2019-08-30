@@ -429,7 +429,7 @@ end
 
 function Ability:remains()
 	if not is_buff and self.aura_targets and self.aura_targets[Target.guid] then
-		return max(aura.expires - Player.time - Player.execute_remains, 0)
+		return max(self.aura_targets[Target.guid].expires - Player.time - Player.execute_remains, 0)
 	end
 	local _, i, id, expires
 	for i = 1, 16 do
@@ -684,8 +684,10 @@ Execute.rage_cost = 15
 local HeroicStrike = Ability.add({78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286}, false, true)
 HeroicStrike.rage_cost = 15
 local Overpower = Ability.add({7384, 7887, 11584, 11585}, false, true)
+Overpower.buff_duration = 5 -- use 5 second imaginary debuff triggered by dodge
 Overpower.cooldown_duration = 5
 Overpower.rage_cost = 5
+Overpower:trackAuras()
 local Rend = Ability.add({772, 6546, 6547, 6548, 11572, 11573, 11574}, false, true)
 Rend.rage_cost = 10
 Rend.buff_duration = 15
@@ -751,8 +753,10 @@ MockingBlow.buff_duration = 6
 MockingBlow.cooldown_duration = 120
 MockingBlow.rage_cost = 10
 local Revenge = Ability.add({6572, 6574, 7379, 11600, 11601, 25288}, false, true)
+Revenge.buff_duration = 5 -- use 5 second imaginary debuff triggered by block/dodge/parry
 Revenge.cooldown_duration = 5
 Revenge.rage_cost = 5
+Revenge:trackAuras()
 local ShieldBash = Ability.add({72, 1671, 1672}, false, true)
 ShieldBash.cooldown_duration = 12
 ShieldBash.rage_cost = 10
@@ -888,7 +892,14 @@ function Charge:usable()
 end
 
 function Overpower:usable()
-	if not Overpower.activation_time or (Player.time - Overpower.activation_time) > 5 then
+	if self:down() then
+		return false
+	end
+	return Ability.usable(self)
+end
+
+function Revenge:usable()
+	if self:down() then
 		return false
 	end
 	return Ability.usable(self)
@@ -947,10 +958,16 @@ APL[STANCE.BATTLE].main = function(self)
 	if Rend:usable() and Rend:down() and Target.timeToDie > 4 then
 		return Rend
 	end
-	if HeroicStrike:usable() and Player.rage >= 30 then
-		return HeroicStrike
+	if Player.enemies > 1 then
+		if Cleave:usable() and Player.rage >= 35 then
+			return Cleave
+		end
+	else
+		if HeroicStrike:usable() and Player.rage >= 30 then
+			return HeroicStrike
+		end
 	end
-	if Bloodrage:usable() then
+	if Bloodrage:usable() and Player.rage < 40 then
 		UseCooldown(Bloodrage)
 	end
 end
@@ -960,16 +977,25 @@ APL[STANCE.DEFENSIVE].main = function(self)
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
-		if Charge:usable() then
-			UseCooldown(Charge)
-		end
 	else
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
 		end
 	end
-	if BloodFury:usable() then
-		UseCooldown(BloodFury)
+	if Revenge:usable() then
+		return Revenge
+	end
+	if Player.enemies > 1 then
+		if Cleave:usable() and Player.rage >= 35 then
+			return Cleave
+		end
+	else
+		if HeroicStrike:usable() and Player.rage >= 30 then
+			return HeroicStrike
+		end
+	end
+	if Bloodrage:usable() and Player.rage < 40 then
+		UseCooldown(Bloodrage)
 	end
 end
 
@@ -978,9 +1004,6 @@ APL[STANCE.BERSERKER].main = function(self)
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
-		if Charge:usable() then
-			UseCooldown(Charge)
-		end
 	else
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
@@ -988,6 +1011,18 @@ APL[STANCE.BERSERKER].main = function(self)
 	end
 	if BloodFury:usable() then
 		UseCooldown(BloodFury)
+	end
+	if Player.enemies > 1 then
+		if Cleave:usable() and Player.rage >= 35 then
+			return Cleave
+		end
+	else
+		if HeroicStrike:usable() and Player.rage >= 30 then
+			return HeroicStrike
+		end
+	end
+	if Bloodrage:usable() and Player.rage < 40 then
+		UseCooldown(Bloodrage)
 	end
 end
 
@@ -1443,6 +1478,31 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	end
 end
 
+CombatEvent.PLAYER_MISSED = function(dstGUID, missType)
+	if Overpower.known and missType == 'DODGE' then
+		Overpower:applyAura(dstGUID)
+	end
+	if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
+		Revenge:applyAura(dstGUID)
+	end
+end
+
+CombatEvent.PLAYER_SWING = function(missed, offHand)
+	local mh, oh = UnitAttackSpeed('player')
+	if offHand and oh then
+		Player.next_swing_oh = Player.time + oh
+	else
+		Player.next_swing_mh = Player.time + mh
+	end
+	if Opt.swing_timer then
+		if missed then
+			smashPanel.text.tr:SetTextColor(1, 0, 0, 1)
+		else
+			smashPanel.text.tr:SetTextColor(1, 1, 1, 1)
+		end
+	end
+end
+
 CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, school, resisted, blocked, absorbed, critical, glancing, crushing, offHand)
 	if Opt.auto_aoe then
 		if dstGUID == Player.guid then
@@ -1451,14 +1511,8 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 			autoAoe:add(dstGUID, true)
 		end
 	end
-	if Opt.swing_timer and srcGUID == Player.guid then
-		local mh, oh = UnitAttackSpeed('player')
-		if offHand and oh then
-			Player.next_swing_oh = Player.time + oh
-		else
-			Player.next_swing_mh = Player.time + mh
-		end
-		smashPanel.text.tr:SetTextColor(1, 1, 1, 1)
+	if srcGUID == Player.guid then
+		CombatEvent.PLAYER_SWING(false, offHand)
 	end
 end
 
@@ -1470,17 +1524,9 @@ CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, 
 			autoAoe:add(dstGUID, true)
 		end
 	end
-	if Opt.swing_timer and srcGUID == Player.guid then
-		local mh, oh = UnitAttackSpeed('player')
-		if offHand and oh then
-			Player.next_swing_oh = Player.time + oh
-		else
-			Player.next_swing_mh = Player.time + mh
-		end
-		smashPanel.text.tr:SetTextColor(1, 0, 0, 1)
-	end
-	if Overpower.known and srcGUID == Player.guid and dstGUID == Target.guid and missType == 'DODGE' then
-		Overpower.activation_time = Player.time
+	if srcGUID == Player.guid then
+		CombatEvent.PLAYER_SWING(true, offHand)
+		CombatEvent.PLAYER_MISSED(dstGUID, missType)
 	end
 end
 
@@ -1535,6 +1581,12 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool,
 		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
 			smashPreviousPanel.border:SetTexture('Interface\\AddOns\\Smash\\misseffect.blp')
 		end
+		if event == 'SPELL_MISSED' then
+			CombatEvent.PLAYER_MISSED(dstGUID, missType)
+		end
+	end
+	if ability == HeroicStrike or ability == Cleave then
+		CombatEvent.PLAYER_SWING(event == 'SPELL_MISSED')
 	end
 end
 
@@ -1726,6 +1778,7 @@ function events:PLAYER_ENTERING_WORLD()
 	Player.guid = UnitGUID('player')
 	events:UPDATE_SHAPESHIFT_FORM('player')
 	events:PLAYER_EQUIPMENT_CHANGED()
+	SetTargetMode(1)
 end
 
 smashPanel.button:SetScript('OnClick', function(self, button, down)

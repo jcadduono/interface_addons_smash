@@ -116,6 +116,7 @@ local Player = {
 	time_diff = 0,
 	ctime = 0,
 	combat_start = 0,
+	enemies = 1,
 	spec = 0,
 	gcd = 1.5,
 	health = 0,
@@ -238,9 +239,10 @@ smashExtraPanel.border = smashExtraPanel:CreateTexture(nil, 'ARTWORK')
 smashExtraPanel.border:SetAllPoints(smashExtraPanel)
 smashExtraPanel.border:SetTexture('Interface\\AddOns\\Smash\\border.blp')
 
--- Start Auto AoE
+-- Start AoE
 
-local targetModes = {
+Player.target_mode = 1
+Player.target_modes = {
 	[STANCE.NONE] = {
 		{1, ''}
 	},
@@ -268,26 +270,30 @@ local targetModes = {
 }
 
 local function SetTargetMode(mode)
-	if mode == targetMode then
+	if mode == Player.target_mode then
 		return
 	end
-	targetMode = min(mode, #targetModes[Player.stance])
-	Player.enemies = targetModes[Player.stance][targetMode][1]
-	smashPanel.text.br:SetText(targetModes[Player.stance][targetMode][2])
+	Player.target_mode = min(mode, #Player.target_modes[Player.stance])
+	Player.enemies = Player.target_modes[Player.stance][Player.target_mode][1]
+	smashPanel.text.br:SetText(Player.target_modes[Player.stance][Player.target_mode][2])
 end
 Smash_SetTargetMode = SetTargetMode
 
 local function ToggleTargetMode()
-	local mode = targetMode + 1
-	SetTargetMode(mode > #targetModes[Player.stance] and 1 or mode)
+	local mode = Player.target_mode + 1
+	SetTargetMode(mode > #Player.target_modes[Player.stance] and 1 or mode)
 end
 Smash_ToggleTargetMode = ToggleTargetMode
 
 local function ToggleTargetModeReverse()
-	local mode = targetMode - 1
-	SetTargetMode(mode < 1 and #targetModes[Player.stance] or mode)
+	local mode = Player.target_mode - 1
+	SetTargetMode(mode < 1 and #Player.target_modes[Player.stance] or mode)
 end
 Smash_ToggleTargetModeReverse = ToggleTargetModeReverse
+
+-- End AoE
+
+-- Start Auto AoE
 
 local autoAoe = {
 	targets = {},
@@ -338,8 +344,8 @@ function autoAoe:update()
 		return
 	end
 	Player.enemies = count
-	for i = #targetModes[Player.stance], 1, -1 do
-		if count >= targetModes[Player.stance][i][1] then
+	for i = #Player.target_modes[Player.stance], 1, -1 do
+		if count >= Player.target_modes[Player.stance][i][1] then
 			SetTargetMode(i)
 			Player.enemies = count
 			return
@@ -1778,7 +1784,6 @@ function events:PLAYER_ENTERING_WORLD()
 	Player.guid = UnitGUID('player')
 	events:UPDATE_SHAPESHIFT_FORM('player')
 	events:PLAYER_EQUIPMENT_CHANGED()
-	SetTargetMode(1)
 end
 
 smashPanel.button:SetScript('OnClick', function(self, button, down)

@@ -880,11 +880,11 @@ end
 -- Start Ability Modifications
 
 function Execute:cost()
-	return max(10, Player.rage)
+	return max(Player.rage, self.rage_cost)
 end
 
 function Execute:usable()
-	if Target.healthPercentage >= 20 then
+	if Target.healthPercentage > 20 then
 		return false
 	end
 	return Ability.usable(self)
@@ -906,6 +906,13 @@ end
 
 function Revenge:usable()
 	if self:down() then
+		return false
+	end
+	return Ability.usable(self)
+end
+
+function Rend:usable()
+	if Target.creature_type == 'Mechanical' or Target.creature_type == 'Elemental' then
 		return false
 	end
 	return Ability.usable(self)
@@ -941,19 +948,15 @@ APL[STANCE.BATTLE].main = function(self)
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
-		if Bloodrage:usable() then
-			UseCooldown(Bloodrage)
-		end
 		if Charge:usable() then
 			UseCooldown(Charge)
+		elseif Bloodrage:usable() then
+			UseCooldown(Bloodrage)
 		end
 	else
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
 		end
-	end
-	if BloodFury:usable() then
-		UseCooldown(BloodFury)
 	end
 	if MortalStrike:usable() then
 		return MortalStrike
@@ -961,20 +964,26 @@ APL[STANCE.BATTLE].main = function(self)
 	if Overpower:usable() then
 		return Overpower
 	end
-	if Rend:usable() and Rend:down() and Target.timeToDie > 4 then
+	if Bloodrage:usable() and Player.rage < 40 then
+		UseCooldown(Bloodrage)
+	end
+	if BloodFury:usable() then
+		UseCooldown(BloodFury)
+	end
+	if Execute:usable() then
+		return Execute
+	end
+	if Rend:usable() and Rend:down() and Target.timeToDie > 4 and (not Execute.known or Target.healthPercentage > 20) then
 		return Rend
 	end
 	if Player.enemies > 1 then
 		if Cleave:usable() and Player.rage >= 35 then
 			return Cleave
 		end
-	else
+	elseif (not Execute.known or Target.healthPercentage > 20) then
 		if HeroicStrike:usable() and Player.rage >= 30 then
 			return HeroicStrike
 		end
-	end
-	if Bloodrage:usable() and Player.rage < 40 then
-		UseCooldown(Bloodrage)
 	end
 end
 
@@ -1613,6 +1622,7 @@ local function UpdateTargetInfo()
 		Target.boss = false
 		Target.stunnable = true
 		Target.classification = 'normal'
+		Target.creature_type = 'Humanoid'
 		Target.player = false
 		Target.level = UnitLevel('player')
 		Target.healthMax = 0
@@ -1643,6 +1653,7 @@ local function UpdateTargetInfo()
 	Target.boss = false
 	Target.stunnable = true
 	Target.classification = UnitClassification('target')
+	Target.creature_type = UnitCreatureType('target')
 	Target.player = UnitIsPlayer('target')
 	Target.level = UnitLevel('target')
 	Target.healthMax = UnitHealthMax('target')

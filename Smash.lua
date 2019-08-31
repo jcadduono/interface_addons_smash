@@ -434,8 +434,11 @@ function Ability:usable()
 end
 
 function Ability:remains()
-	if not is_buff and self.aura_targets and self.aura_targets[Target.guid] then
-		return max(self.aura_targets[Target.guid].expires - Player.time - Player.execute_remains, 0)
+	if self.aura_targets then
+		local guid = UnitGUID(self.auraTarget)
+		if guid and self.aura_targets[guid] then
+			return max(self.aura_targets[guid].expires - Player.time - Player.execute_remains, 0)
+		end
 	end
 	local _, i, id, expires
 	for i = 1, 16 do
@@ -758,8 +761,8 @@ local MockingBlow = Ability.add({694, 7400, 7402, 20559, 20560}, false, true)
 MockingBlow.buff_duration = 6
 MockingBlow.cooldown_duration = 120
 MockingBlow.rage_cost = 10
-local Revenge = Ability.add({6572, 6574, 7379, 11600, 11601, 25288}, false, true)
-Revenge.buff_duration = 5 -- use 5 second imaginary debuff triggered by block/dodge/parry
+local Revenge = Ability.add({6572, 6574, 7379, 11600, 11601, 25288}, true, true)
+Revenge.buff_duration = 5 -- use 5 second imaginary buff triggered by block/dodge/parry
 Revenge.cooldown_duration = 5
 Revenge.rage_cost = 5
 Revenge:trackAuras()
@@ -776,7 +779,9 @@ local Taunt = Ability.add({355}, false, true)
 Taunt.cooldown_duration = 10
 Taunt.triggers_gcd = false
 ------ Talents
-
+local ShieldSlam = Ability.add({23922, 23923, 23924, 23925}, false, true)
+ShieldSlam.rage_cost = 20
+ShieldSlam.cooldown_duration = 6
 ------ Procs
 
 -- PvP talents
@@ -992,13 +997,22 @@ APL[STANCE.DEFENSIVE].main = function(self)
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
+		if Bloodrage:usable() then
+			UseCooldown(Bloodrage)
+		end
 	else
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			UseCooldown(BattleShout)
 		end
 	end
+	if ShieldSlam:usable() then
+		return ShieldSlam
+	end
 	if Revenge:usable() then
 		return Revenge
+	end
+	if Bloodrage:usable() and Player.rage < 40 then
+		UseCooldown(Bloodrage)
 	end
 	if Player.enemies > 1 then
 		if Cleave:usable() and Player.rage >= 35 then
@@ -1495,15 +1509,6 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	end
 end
 
-CombatEvent.PLAYER_MISSED = function(dstGUID, missType)
-	if Overpower.known and missType == 'DODGE' then
-		Overpower:applyAura(dstGUID)
-	end
-	if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
-		Revenge:applyAura(dstGUID)
-	end
-end
-
 CombatEvent.PLAYER_SWING = function(missed, offHand)
 	local mh, oh = UnitAttackSpeed('player')
 	if offHand and oh then
@@ -1531,6 +1536,9 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 	if srcGUID == Player.guid then
 		CombatEvent.PLAYER_SWING(false, offHand)
 	end
+	if dstGUID == Player.guid and blocked then
+		Revenge:applyAura(dstGUID)
+	end
 end
 
 CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, amountMissed)
@@ -1541,13 +1549,25 @@ CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, 
 			autoAoe:add(dstGUID, true)
 		end
 	end
-	if srcGUID == Player.guid then
+	if dstGUID == Player.guid then
+		if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
+			Revenge:applyAura(dstGUID)
+		end
+	elseif srcGUID == Player.guid then
 		CombatEvent.PLAYER_SWING(true, offHand)
-		CombatEvent.PLAYER_MISSED(dstGUID, missType)
+		if Overpower.known and missType == 'DODGE' then
+			Overpower:applyAura(dstGUID)
+		end
 	end
 end
 
 CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool, missType)
+	if dstGUID == Player.guid and event == 'SPELL_MISSED' then
+		if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
+			Revenge:applyAura(dstGUID)
+		end
+	end
+
 	if srcGUID ~= Player.guid then
 		return
 	end
@@ -1598,8 +1618,8 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool,
 		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
 			smashPreviousPanel.border:SetTexture('Interface\\AddOns\\Smash\\misseffect.blp')
 		end
-		if event == 'SPELL_MISSED' then
-			CombatEvent.PLAYER_MISSED(dstGUID, missType)
+		if Overpower.known and missType == 'DODGE' then
+			Overpower:applyAura(dstGUID)
 		end
 	end
 	if ability == HeroicStrike or ability == Cleave then
@@ -1779,10 +1799,7 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 	end
 end
 
-function events:UPDATE_SHAPESHIFT_FORM(unitName)
-	if unitName ~= 'player' then
-		return
-	end
+function events:UPDATE_SHAPESHIFT_FORM()
 	Player.stance = GetShapeshiftForm()
 	UpdateAbilityData()
 end
@@ -1795,7 +1812,7 @@ function events:PLAYER_ENTERING_WORLD()
 	local _
 	_, Player.instance = IsInInstance()
 	Player.guid = UnitGUID('player')
-	events:UPDATE_SHAPESHIFT_FORM('player')
+	events:UPDATE_SHAPESHIFT_FORM()
 	events:PLAYER_EQUIPMENT_CHANGED()
 end
 
@@ -2042,17 +2059,17 @@ function SlashCmdList.Smash(msg, editbox)
 		if msg[2] then
 			if startsWith(msg[2], 'b') then
 				Opt.hide.battle = not Opt.hide.battle
-				events:UPDATE_SHAPESHIFT_FORM('player')
+				events:UPDATE_SHAPESHIFT_FORM()
 				return Status('Battle stance', not Opt.hide.battle)
 			end
 			if startsWith(msg[2], 'd') then
 				Opt.hide.defensive = not Opt.hide.defensive
-				events:UPDATE_SHAPESHIFT_FORM('player')
+				events:UPDATE_SHAPESHIFT_FORM()
 				return Status('Defensive stance', not Opt.hide.defensive)
 			end
 			if startsWith(msg[2], 'b') then
 				Opt.hide.berserker = not Opt.hide.berserker
-				events:UPDATE_SHAPESHIFT_FORM('player')
+				events:UPDATE_SHAPESHIFT_FORM()
 				return Status('Berserker stance', not Opt.hide.berserker)
 			end
 		end

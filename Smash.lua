@@ -106,8 +106,7 @@ local events, glows = {}, {}
 
 local timer = {
 	combat = 0,
-	display = 0,
-	health = 0
+	display = 0
 }
 
 -- current player information
@@ -134,12 +133,7 @@ local Player = {
 }
 
 -- current target information
-local Target = {
-	boss = false,
-	guid = 0,
-	healthArray = {},
-	hostile = false,
-}
+local Target = {}
 
 local smashPanel = CreateFrame('Frame', 'smashPanel', UIParent)
 smashPanel:SetPoint('CENTER', 0, -169)
@@ -889,7 +883,7 @@ function Execute:cost()
 end
 
 function Execute:usable()
-	if Target.healthPercentage > 20 then
+	if Target.health > 20 then
 		return false
 	end
 	return Ability.usable(self)
@@ -978,14 +972,14 @@ APL[STANCE.BATTLE].main = function(self)
 	if Execute:usable() then
 		return Execute
 	end
-	if Rend:usable() and Rend:down() and Target.timeToDie > 4 and (not Execute.known or Target.healthPercentage > 20) then
+	if Rend:usable() and Rend:down() and (not Execute.known or Target.health > 20) then
 		return Rend
 	end
 	if Player.enemies > 1 then
 		if Cleave:usable() and Player.rage >= 35 then
 			return Cleave
 		end
-	elseif (not Execute.known or Target.healthPercentage > 20) then
+	elseif (not Execute.known or Target.health > 20) then
 		if HeroicStrike:usable() and Player.rage >= 30 then
 			return HeroicStrike
 		end
@@ -1317,17 +1311,6 @@ local function HookResourceFrame()
 	end
 end
 
-local function UpdateTargetHealth()
-	timer.health = 0
-	Target.health = UnitHealth('target')
-	table.remove(Target.healthArray, 1)
-	Target.healthArray[15] = Target.health
-	Target.timeToDieMax = Target.health / UnitHealthMax('player') * 30
-	Target.healthPercentage = Target.healthMax > 0 and (Target.health / Target.healthMax * 100) or 100
-	Target.healthLostPerSec = (Target.healthArray[1] - Target.health) / 3
-	Target.timeToDie = Target.healthLostPerSec > 0 and min(Target.timeToDieMax, Target.health / Target.healthLostPerSec) or Target.timeToDieMax
-end
-
 local function UpdateDisplay()
 	timer.display = 0
 	local dim, text_tl, text_tr
@@ -1374,6 +1357,7 @@ local function UpdateCombat()
 	Player.health_max = UnitHealthMax('player')
 	Player.rage = UnitPower('player', 1)
 	Player.moving = GetUnitSpeed('player') ~= 0
+	Target.health = UnitHealth('target')
 
 	trackAuras:purge()
 	if Opt.auto_aoe then
@@ -1636,23 +1620,17 @@ local function UpdateTargetInfo()
 	if ShouldHide() then
 		return
 	end
-	local guid = UnitGUID('target')
-	if not guid then
-		Target.guid = nil
-		Target.boss = false
-		Target.stunnable = true
+	Target.guid = UnitGUID('target')
+	Target.boss = false
+	Target.stunnable = true
+	if not Target.guid then
 		Target.classification = 'normal'
 		Target.creature_type = 'Humanoid'
 		Target.player = false
 		Target.level = UnitLevel('player')
-		Target.healthMax = 0
 		Target.hostile = true
-		local i
-		for i = 1, 15 do
-			Target.healthArray[i] = 0
-		end
+		Target.health = 100
 		if Opt.always_on then
-			UpdateTargetHealth()
 			UpdateCombat()
 			smashPanel:Show()
 			return true
@@ -1662,32 +1640,21 @@ local function UpdateTargetInfo()
 		end
 		return
 	end
-	if guid ~= Target.guid then
-		Target.guid = guid
-		local i
-		for i = 1, 15 do
-			Target.healthArray[i] = UnitHealth('target')
-		end
-		Overpower.activation_time = nil
-	end
-	Target.boss = false
-	Target.stunnable = true
 	Target.classification = UnitClassification('target')
 	Target.creature_type = UnitCreatureType('target')
 	Target.player = UnitIsPlayer('target')
 	Target.level = UnitLevel('target')
-	Target.healthMax = UnitHealthMax('target')
 	Target.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
+	Target.health = UnitHealth('target')
 	if not Target.player and Target.classification ~= 'minus' and Target.classification ~= 'normal' then
 		if Target.level == -1 or (Player.instance == 'party' and Target.level >= UnitLevel('player') + 2) then
 			Target.boss = true
 			Target.stunnable = false
-		elseif Player.instance == 'raid' or (Target.healthMax > Player.health_max * 10) then
+		elseif Player.instance == 'raid' then
 			Target.stunnable = false
 		end
 	end
 	if Target.hostile or Opt.always_on then
-		UpdateTargetHealth()
 		UpdateCombat()
 		smashPanel:Show()
 		return true
@@ -1831,15 +1798,11 @@ end)
 smashPanel:SetScript('OnUpdate', function(self, elapsed)
 	timer.combat = timer.combat + elapsed
 	timer.display = timer.display + elapsed
-	timer.health = timer.health + elapsed
 	if timer.combat >= Opt.frequency then
 		UpdateCombat()
 	end
 	if timer.display >= 0.05 then
 		UpdateDisplay()
-	end
-	if timer.health >= 0.2 then
-		UpdateTargetHealth()
 	end
 end)
 

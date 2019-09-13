@@ -401,6 +401,12 @@ end
 
 function Ability:match(spell)
 	if type(spell) == 'number' then
+		local _, id
+		for _, id in next, self.spellIds do
+			if spell == id then
+				return true
+			end
+		end
 		return spell == self.spellId
 	elseif type(spell) == 'string' then
 		return spell:lower() == self.name:lower()
@@ -717,7 +723,7 @@ ThunderClap:autoAoe(false)
 ------ Talents
 local DeepWounds = Ability.add({12834}, false, true)
 DeepWounds.buff_duration = 12
-local MortalStrike = Ability.add({12294}, false, true)
+local MortalStrike = Ability.add({12294, 21551, 21552, 21553}, false, true)
 MortalStrike.rage_cost = 30
 MortalStrike.cooldown_duration = 6
 local SweepingStrikes = Ability.add({12292}, true, true)
@@ -867,6 +873,17 @@ local function RageDeficit()
 	return Player.rage_max - Player.rage
 end
 
+local function NextSwing()
+	if Player.ability_casting then
+		if Player.ability_casting == Slam then
+			return Player.cast_end, 0
+		end
+		local mh, oh = UnitAttackSpeed('player')
+		return Player.cast_end + mh, Player.cast_end + oh
+	end
+	return Player.next_swing_mh, Player.next_swing_oh
+end
+
 local function TimeInCombat()
 	if Player.combat_start > 0 then
 		return Player.time - Player.combat_start
@@ -957,11 +974,17 @@ APL[STANCE.BATTLE].main = function(self)
 			UseCooldown(BattleShout)
 		end
 	end
-	if MortalStrike:usable() then
-		return MortalStrike
-	end
 	if Overpower:usable() then
 		return Overpower
+	end
+	if ShieldSlam:usable() then
+		return ShieldSlam
+	end
+	if ShieldSlam.known then
+		UseExtra(DefensiveStance)
+	end
+	if SweepingStrikes:up() and Player.rage <= 30 then
+		UseExtra(BerserkerStance)
 	end
 	if Bloodrage:usable() and Player.rage < 40 then
 		UseCooldown(Bloodrage)
@@ -969,25 +992,41 @@ APL[STANCE.BATTLE].main = function(self)
 	if BloodFury:usable() then
 		UseCooldown(BloodFury)
 	end
-	if Execute:usable() then
-		return Execute
-	end
-	if Rend:usable() and Rend:down() and (not Execute.known or Target.health > 20) then
-		return Rend
-	end
 	if Player.enemies > 1 then
-		if Cleave:usable() and Player.rage >= 35 then
-			return Cleave
+		if SweepingStrikes:usable() then
+			UseCooldown(SweepingStrikes)
 		end
-	elseif (not Execute.known or Target.health > 20) then
-		if HeroicStrike:usable() and Player.rage >= 30 then
-			return HeroicStrike
+		if Cleave:usable() then
+			if SweepingStrikes.known and SweepingStrikes:up() and Player.rage >= 25 then
+				return Cleave
+			end
+			if Player.rage >= 35 and (not SweepingStrikes.known or not SweepingStrikes:ready(4)) then
+				return Cleave
+			end
+		end
+	else
+		if Execute:usable() then
+			return Execute
+		end
+		if (not Execute.known or Target.health > 20) then
+			if MortalStrike:usable() then
+				return MortalStrike
+			end
+			if Rend:usable() and Rend:down() and Player.rage >= 40 then
+				return Rend
+			end
+			if HeroicStrike:usable() and Player.rage >= 60 then
+				return HeroicStrike
+			end
 		end
 	end
 end
 
 APL[STANCE.DEFENSIVE].main = function(self)
 	if TimeInCombat() == 0 then
+		if Charge:ready(2) then
+			UseExtra(BattleStance)
+		end
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
@@ -999,6 +1038,9 @@ APL[STANCE.DEFENSIVE].main = function(self)
 			UseCooldown(BattleShout)
 		end
 	end
+	if DemoralizingShout:usable() and DemoralizingShout:down() then
+		UseCooldown(DemoralizingShout)
+	end
 	if ShieldSlam:usable() then
 		return ShieldSlam
 	end
@@ -1009,21 +1051,32 @@ APL[STANCE.DEFENSIVE].main = function(self)
 		UseCooldown(Bloodrage)
 	end
 	if Player.enemies > 1 then
-		if Cleave:usable() and Player.rage >= 35 then
-			return Cleave
+		if SweepingStrikes.known and SweepingStrikes:ready(2) and Player.rage <= 30 then
+			UseExtra(BattleStance)
+		end
+		if Cleave:usable() then
+			if SweepingStrikes.known and SweepingStrikes:up() and Player.rage >= 25 then
+				return Cleave
+			end
+			if Player.rage >= 35 and (not SweepingStrikes.known or not SweepingStrikes:ready(4)) then
+				return Cleave
+			end
 		end
 	else
-		if HeroicStrike:usable() and Player.rage >= 30 then
+		if MortalStrike:usable() and Player.rage >= 40 then
+			return MortalStrike
+		end
+		if HeroicStrike:usable() and Player.rage >= 60 then
 			return HeroicStrike
 		end
-	end
-	if Bloodrage:usable() and Player.rage < 40 then
-		UseCooldown(Bloodrage)
 	end
 end
 
 APL[STANCE.BERSERKER].main = function(self)
 	if TimeInCombat() == 0 then
+		if Charge:ready(2) then
+			UseExtra(BattleStance)
+		end
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
@@ -1032,20 +1085,56 @@ APL[STANCE.BERSERKER].main = function(self)
 			UseCooldown(BattleShout)
 		end
 	end
+	if Bloodrage:usable() and Player.rage < 40 then
+		UseCooldown(Bloodrage)
+	end
+	if BerserkerRage:usable() and HealthPct() < 90 then
+		UseCooldown(BerserkerRage)
+	end
 	if BloodFury:usable() then
 		UseCooldown(BloodFury)
 	end
+	if ShieldSlam:usable() then
+		return ShieldSlam
+	end
 	if Player.enemies > 1 then
-		if Cleave:usable() and Player.rage >= 35 then
-			return Cleave
+		if SweepingStrikes:ready(2) and Player.rage <= 30 then
+			UseExtra(BattleStance)
+		end
+		if Player.enemies >= 3 and Whirlwind.known then
+			if Whirlwind:usable() and Player.rage >= 35 then
+				return Whirlwind
+			end
+			if Cleave:usable() and (Player.rage >= 50 or not Whirlwind:ready(4)) then
+				if SweepingStrikes.known and SweepingStrikes:up() and Player.rage >= 25 then
+					return Cleave
+				end
+				if Player.rage >= 35 and (not SweepingStrikes.known or not SweepingStrikes:ready(4)) then
+					return Cleave
+				end
+			end
+		else
+			if Cleave:usable() then
+				if SweepingStrikes.known and SweepingStrikes:up() and Player.rage >= 25 then
+					return Cleave
+				end
+				if Player.rage >= 35 and (not SweepingStrikes.known or not SweepingStrikes:ready(4)) then
+					return Cleave
+				end
+			end
 		end
 	else
-		if HeroicStrike:usable() and Player.rage >= 30 then
-			return HeroicStrike
+		if Execute:usable() then
+			return Execute
 		end
-	end
-	if Bloodrage:usable() and Player.rage < 40 then
-		UseCooldown(Bloodrage)
+		if (not Execute.known or Target.health > 20) then
+			if MortalStrike:usable() then
+				return MortalStrike
+			end
+			if HeroicStrike:usable() and Player.rage >= 60 then
+				return HeroicStrike
+			end
+		end
 	end
 end
 
@@ -1322,14 +1411,12 @@ local function UpdateDisplay()
 		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
 	end
 	if Opt.swing_timer then
-		local next_swing
-		if Player.equipped_oh then
-			next_swing = min(Player.next_swing_mh, Player.next_swing_oh)
-		else
-			next_swing = Player.next_swing_mh
+		local mh, oh = NextSwing()
+		if (mh - Player.time) > 0 then
+			text_tl = format('%.1f', mh - Player.time)
 		end
-		if (next_swing - Player.time) > 0 then
-			text_tr = format('%.1f', next_swing - Player.time)
+		if (oh - Player.time) > 0 then
+			text_tr = format('%.1f', oh - Player.time)
 		end
 	end
 	smashPanel.dimmer:SetShown(dim)
@@ -1339,7 +1426,7 @@ end
 
 local function UpdateCombat()
 	timer.combat = 0
-	local _, start, duration, remains, spellName
+	local _, start, duration, spellName, castEnd
 	Player.ctime = GetTime()
 	Player.time = Player.ctime - Player.time_diff
 	Player.last_main = Player.main
@@ -1348,16 +1435,23 @@ local function UpdateCombat()
 	Player.main =  nil
 	Player.cd = nil
 	Player.extra = nil
-	start, duration = GetSpellCooldown(BattleShout.spellId)
-	Player.gcd_remains = start > 0 and duration - (Player.ctime - start) or 0
-	_, _, _, _, remains, _, _, spellName = CastingInfo()
-	Player.ability_casting = abilities.bySpellName[spellName]
-	Player.execute_remains = max(remains and (remains / 1000 - Player.ctime) or 0, Player.gcd_remains)
 	Player.health = UnitHealth('player')
 	Player.health_max = UnitHealthMax('player')
 	Player.rage = UnitPower('player', 1)
 	Player.moving = GetUnitSpeed('player') ~= 0
 	Target.health = UnitHealth('target')
+	start, duration = GetSpellCooldown(BattleShout.spellId)
+	Player.gcd_remains = start > 0 and duration - (Player.ctime - start) or 0
+	spellName, _, _, _, castEnd = CastingInfo()
+	if spellName then
+		Player.cast_end = castEnd / 1000 - Player.time_diff
+		Player.ability_casting = abilities.bySpellName[spellName]
+		Player.execute_remains = Player.cast_end - Player.time
+	else
+		Player.cast_end = nil
+		Player.ability_casting = nil
+		Player.execute_remains = Player.gcd_remains
+	end
 
 	trackAuras:purge()
 	if Opt.auto_aoe then
@@ -1605,9 +1699,12 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool,
 		if Overpower.known and missType == 'DODGE' then
 			Overpower:applyAura(dstGUID)
 		end
-	end
-	if ability == HeroicStrike or ability == Cleave then
-		CombatEvent.PLAYER_SWING(event == 'SPELL_MISSED')
+		if ability == HeroicStrike or ability == Cleave or ability == Slam then
+			CombatEvent.PLAYER_SWING(event == 'SPELL_MISSED')
+		end
+		if ability == Slam then
+			CombatEvent.PLAYER_SWING(false, true) -- reset offHand timer too
+		end
 	end
 end
 

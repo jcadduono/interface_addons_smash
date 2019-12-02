@@ -126,6 +126,7 @@ local Player = {
 	equipped_oh = false,
 	next_swing_mh = 0,
 	next_swing_oh = 0,
+	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 		[165581] = true, -- Crest of Pa'ku (Horde)
@@ -865,28 +866,32 @@ local Trinket2 = InventoryItem.add(0)
 
 -- Start Helpful Functions
 
-local function HealthPct()
-	return Player.health / Player.health_max * 100
+function Player:HealthPct()
+	return self.health / self.health_max * 100
 end
 
-local function RageDeficit()
-	return Player.rage_max - Player.rage
+function Player:RageDeficit()
+	return self.rage_max - self.rage
 end
 
-local function NextSwing()
-	if Player.ability_casting then
-		if Player.ability_casting == Slam then
-			return Player.cast_end, 0
+function Player:NextSwing()
+	if self.ability_casting then
+		if self.ability_casting == Slam then
+			return self.cast_end, 0
 		end
 		local mh, oh = UnitAttackSpeed('player')
-		return Player.cast_end + mh, Player.cast_end + oh
+		return self.cast_end + mh, self.cast_end + oh
 	end
-	return Player.next_swing_mh, Player.next_swing_oh
+	return self.next_swing_mh, self.next_swing_oh
 end
 
-local function TimeInCombat()
-	if Player.combat_start > 0 then
-		return Player.time - Player.combat_start
+function Player:UnderAttack()
+	return (Player.time - self.last_swing_taken) < 3
+end
+
+function Player:TimeInCombat()
+	if self.combat_start > 0 then
+		return self.time - self.combat_start
 	end
 	return 0
 end
@@ -960,7 +965,7 @@ local APL = {
 }
 
 APL[STANCE.BATTLE].main = function(self)
-	if TimeInCombat() == 0 then
+	if Player:TimeInCombat() == 0 then
 		if BattleShout:usable() and BattleShout:remains() < 10 then
 			return BattleShout
 		end
@@ -977,6 +982,9 @@ APL[STANCE.BATTLE].main = function(self)
 	if Overpower:usable() then
 		return Overpower
 	end
+	if DemoralizingShout:usable() and Player:UnderAttack() and DemoralizingShout:down() then
+		UseCooldown(DemoralizingShout)
+	end
 	if ShieldSlam:usable() then
 		return ShieldSlam
 	end
@@ -989,7 +997,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if Bloodrage:usable() and Player.rage < 40 then
 		UseCooldown(Bloodrage)
 	end
-	if BloodFury:usable() then
+	if BloodFury:usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
 	if Player.enemies > 1 then
@@ -1023,7 +1031,7 @@ APL[STANCE.BATTLE].main = function(self)
 end
 
 APL[STANCE.DEFENSIVE].main = function(self)
-	if TimeInCombat() == 0 then
+	if Player:TimeInCombat() == 0 then
 		if Charge:ready(2) then
 			UseExtra(BattleStance)
 		end
@@ -1038,7 +1046,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 			UseCooldown(BattleShout)
 		end
 	end
-	if DemoralizingShout:usable() and DemoralizingShout:down() then
+	if DemoralizingShout:usable() and Player:UnderAttack() and DemoralizingShout:down() then
 		UseCooldown(DemoralizingShout)
 	end
 	if ShieldSlam:usable() then
@@ -1073,7 +1081,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 end
 
 APL[STANCE.BERSERKER].main = function(self)
-	if TimeInCombat() == 0 then
+	if Player:TimeInCombat() == 0 then
 		if Charge:ready(2) then
 			UseExtra(BattleStance)
 		end
@@ -1088,10 +1096,10 @@ APL[STANCE.BERSERKER].main = function(self)
 	if Bloodrage:usable() and Player.rage < 40 then
 		UseCooldown(Bloodrage)
 	end
-	if BerserkerRage:usable() and HealthPct() < 90 then
+	if BerserkerRage:usable() and Player:HealthPct() < 90 then
 		UseCooldown(BerserkerRage)
 	end
-	if BloodFury:usable() then
+	if BloodFury:usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
 	if ShieldSlam:usable() then
@@ -1411,7 +1419,7 @@ local function UpdateDisplay()
 		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
 	end
 	if Opt.swing_timer then
-		local mh, oh = NextSwing()
+		local mh, oh = Player:NextSwing()
 		if (mh - Player.time) > 0 then
 			text_tl = format('%.1f', mh - Player.time)
 		end
@@ -1604,45 +1612,52 @@ CombatEvent.PLAYER_SWING = function(missed, offHand)
 end
 
 CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, school, resisted, blocked, absorbed, critical, glancing, crushing, offHand)
-	if Opt.auto_aoe then
-		if dstGUID == Player.guid then
-			autoAoe:add(srcGUID, true)
-		elseif srcGUID == Player.guid then
-			autoAoe:add(dstGUID, true)
-		end
-	end
 	if srcGUID == Player.guid then
 		CombatEvent.PLAYER_SWING(false, offHand)
-	end
-	if dstGUID == Player.guid and blocked then
-		Revenge:applyAura(dstGUID)
+		if Opt.auto_aoe then
+			autoAoe:add(dstGUID, true)
+		end
+	elseif dstGUID == Player.guid then
+		Player.last_swing_taken = Player.time
+		if blocked then
+			Revenge:applyAura(dstGUID)
+		end
+		if Opt.auto_aoe then
+			autoAoe:add(srcGUID, true)
+		end
 	end
 end
 
 CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, amountMissed)
-	if Opt.auto_aoe then
-		if dstGUID == Player.guid then
-			autoAoe:add(srcGUID, true)
-		elseif srcGUID == Player.guid and not (missType == 'EVADE' or missType == 'IMMUNE') then
-			autoAoe:add(dstGUID, true)
-		end
-	end
-	if dstGUID == Player.guid then
-		if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
-			Revenge:applyAura(dstGUID)
-		end
-	elseif srcGUID == Player.guid then
+	if srcGUID == Player.guid then
 		CombatEvent.PLAYER_SWING(true, offHand)
 		if Overpower.known and missType == 'DODGE' then
 			Overpower:applyAura(dstGUID)
+		end
+		if Opt.auto_aoe and not (missType == 'EVADE' or missType == 'IMMUNE') then
+			autoAoe:add(dstGUID, true)
+		end
+	elseif dstGUID == Player.guid then
+		Player.last_swing_taken = Player.time
+		if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
+			Revenge:applyAura(dstGUID)
+		end
+		if Opt.auto_aoe then
+			autoAoe:add(srcGUID, true)
 		end
 	end
 end
 
 CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool, missType)
-	if dstGUID == Player.guid and event == 'SPELL_MISSED' then
-		if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
-			Revenge:applyAura(dstGUID)
+	if event == 'SPELL_MISSED' then
+		if srcGUID == Player.guid then
+			if Overpower.known and missType == 'DODGE' then
+				Overpower:applyAura(dstGUID)
+			end
+		elseif dstGUID == Player.guid then
+			if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
+				Revenge:applyAura(dstGUID)
+			end
 		end
 	end
 
@@ -1695,9 +1710,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, _, spellName, spellSchool,
 	if event == 'SPELL_MISSED' or event == 'SPELL_DAMAGE' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
 			smashPreviousPanel.border:SetTexture('Interface\\AddOns\\Smash\\misseffect.blp')
-		end
-		if Overpower.known and missType == 'DODGE' then
-			Overpower:applyAura(dstGUID)
 		end
 		if ability == HeroicStrike or ability == Cleave or ability == Slam then
 			CombatEvent.PLAYER_SWING(event == 'SPELL_MISSED')
@@ -1780,6 +1792,7 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
+	Player.last_swing_taken = 0
 	Player.previous_gcd = {}
 	if Player.last_ability then
 		Player.last_ability = nil

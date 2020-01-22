@@ -729,9 +729,9 @@ end
 local BerserkerRage = Ability:Add(18499, true, true)
 BerserkerRage.buff_duration = 6
 BerserkerRage.cooldown_duration = 60
-local Charge = Ability:Add(100, false, true)
+local Charge = Ability:Add(100, false, true, 105771)
+Charge.buff_duration = 1
 Charge.cooldown_duration = 20
-Charge.rage_cost = -20
 Charge.requires_charge = true
 local HeroicLeap = Ability:Add(6544, false, true)
 HeroicLeap.cooldown_duration = 45
@@ -755,18 +755,20 @@ Taunt.triggers_gcd = false
 
 ---- Arms
 local Avatar = Ability:Add(107574, true, true)
-Avatar.rage_cost = -20
 Avatar.buff_duration = 20
 Avatar.cooldown_duration = 90
-local Bladestorm = Ability:Add(46924, true, true)
+local Bladestorm = Ability:Add(227847, true, true, 50622)
 Bladestorm.buff_duration = 4
 Bladestorm.cooldown_duration = 60
 Bladestorm:AutoAoe(true)
-local ColossusSmash = Ability:Add(167105, false, true, 208086)
+local ColossusSmash = Ability:Add(167105, false, true)
 ColossusSmash.cooldown_duration = 45
-ColossusSmash.buff_duration = 10
-local DeepWounds = Ability:Add(115767, false, true)
-DeepWounds.buff_duration = 15
+ColossusSmash.debuff = Ability:Add(208086, false, true)
+ColossusSmash.debuff.buff_duration = 10
+local DeepWounds = Ability:Add(262111, false, true, 262115)
+DeepWounds.buff_duration = 6
+DeepWounds.tick_interval = 2
+DeepWounds.hasted_ticks = true
 local DieByTheSword = Ability:Add(118038, true, true)
 DieByTheSword.buff_duration = 8
 DieByTheSword.cooldown_duration = 180
@@ -782,21 +784,19 @@ Overpower.cooldown_duration = 12
 local Rend = Ability:Add(772, false, true)
 Rend.rage_cost = 30
 Rend.buff_duration = 12
+Rend.tick_interval = 3
 Rend.hasted_ticks = true
 local Slam = Ability:Add(1464, false, true)
 Slam.rage_cost = 20
 local SweepingStrikes = Ability:Add(260708, true, true)
 SweepingStrikes.buff_duration = 12
 SweepingStrikes.cooldown_duration = 30
-local Whirlwind = Ability:Add(1680, false, true)
+local Whirlwind = Ability:Add(1680, false, true, 199658)
 Whirlwind.rage_cost = 30
 Whirlwind:AutoAoe(true)
 local Hamstring = Ability:Add(1715, false, true)
 Hamstring.rage_cost = 10
 Hamstring.buff_duration = 15
-local Recklessness = Ability:Add(1719, true, true)
-Recklessness.buff_duration = 10
-Recklessness.cooldown_duration = 90
 local VictoryRush = Ability:Add(34428, false, true)
 ------ Talents
 local Cleave = Ability:Add(845, false, true)
@@ -810,6 +810,9 @@ DeadlyCalm.cooldown_duration = 60
 DeadlyCalm.triggers_gcd = false
 local Dreadnaught = Ability:Add(262150, false, true)
 local FervorOfBattle = Ability:Add(202316, false, true)
+local ImpendingVictory = Ability:Add(202168, false, true)
+ImpendingVictory.cooldown_duration = 30
+ImpendingVictory.rage_cost = 10
 local Massacre = Ability:Add(206315, false, true, 281001)
 local Ravager = Ability:Add(152277, false, true)
 Ravager.buff_duration = 7
@@ -827,7 +830,9 @@ local Victorious = Ability:Add(32216, true, true)
 Victorious.buff_duration = 20
 
 ---- Fury
-
+local Recklessness = Ability:Add(1719, true, true)
+Recklessness.buff_duration = 10
+Recklessness.cooldown_duration = 90
 ------ Talents
 
 ------ Procs
@@ -839,11 +844,13 @@ Victorious.buff_duration = 20
 ------ Procs
 
 --- Azerite Traits
-local CrushingAssault = Ability:Add(278824, true, true, 278826)
+local CrushingAssault = Ability:Add(278751, true, true, 278826)
 CrushingAssault.buff_duration = 10
 local ExecutionersPrecision = Ability:Add(272866, false, true, 272870)
 ExecutionersPrecision.buff_duration = 30
-local TestOfMight = Ability:Add(275529, true, true, 275532)
+local SeismicWave = Ability:Add(277639, false, true, 278497)
+SeismicWave:AutoAoe()
+local TestOfMight = Ability:Add(275529, true, true, 275540)
 TestOfMight.buff_duration = 12
 -- Heart of Azeroth
 ---- Major Essences
@@ -1045,6 +1052,7 @@ function Azerite:Update()
 							self.traits[pid] = 1 + (self.traits[pid] or 0)
 							pinfo = C_AzeriteEmpoweredItem.GetPowerInfo(pid)
 							if pinfo and pinfo.spellID then
+								--print('Azerite found:', pinfo.azeritePowerID, GetSpellInfo(pinfo.spellID))
 								self.traits[pinfo.spellID] = self.traits[pid]
 							end
 						end
@@ -1167,8 +1175,17 @@ function Player:UpdateAbilities()
 	if Warbreaker.known then
 		ColossusSmash.known = false
 	end
+	if ColossusSmash.known or Warbreaker.known then
+		ColossusSmash.debuff.known = true
+	end
 	if Ravager.known then
 		Bladestorm.known = false
+	end
+	if ImpendingVictory.known then
+		VictoryRush.known = false
+	end
+	if VictoryRush.known or ImpendingVictory.known then
+		Victorious.known = true
 	end
 
 	abilities.bySpellId = {}
@@ -1274,21 +1291,29 @@ end
 -- Start Ability Modifications
 
 function Ability:Cost()
-	if DeadlyCalm:Up() then
+	if DeadlyCalm.known and DeadlyCalm:Up() then
 		return 0
 	end
 	return self.rage_cost
 end
 
 function Execute:Cost()
-	if SuddenDeath:Up() then
+	if SuddenDeath.known and SuddenDeath:Up() then
 		return 0
 	end
-	return max(min(40, Player.rage), self.rage_cost)
+	return Ability.Cost(self)
+end
+
+function Slam:Cost()
+	local cost = Ability.Cost(self)
+	if CrushingAssault.known and CrushingAssault:up() then
+		cost = cost - 20
+	end
+	return max(0, cost)
 end
 
 function Execute:Usable()
-	if not SuddenDeath:Up() and Target.healthPercentage >= (Massacre.known and 35 or 20) then
+	if (not SuddenDeath.known or not SuddenDeath:Up()) and Target.healthPercentage >= (Massacre.known and 35 or 20) then
 		return false
 	end
 	return Ability.Usable(self)
@@ -1364,10 +1389,10 @@ actions+=/run_action_list,name=five_target,if=spell_targets.whirlwind>4
 actions+=/run_action_list,name=execute,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
 actions+=/run_action_list,name=single_target
 ]]
-	if LightsJudgment:Usable() and ColossusSmash:Down() and Target.timeToDie > 4 then
+	if LightsJudgment:Usable() and ColossusSmash.debuff:Down() and Target.timeToDie > 4 then
 		UseExtra(LightsJudgment)
 	end
-	if Avatar:Usable() and (ColossusSmash:Remains() < 8 or (Warbreaker.known and Warbreaker:Ready(8))) then
+	if Avatar:Usable() and (ColossusSmash.debuff:Remains() < 8 or (Warbreaker.known and Warbreaker:Ready(8))) then
 		UseCooldown(Avatar)
 	end
 	if SweepingStrikes:Ready() and Player.enemies > 1 and (not Bladestorm:Ready(10) or not ColossusSmash:Ready(8) or TestOfMight.known) then
@@ -1406,10 +1431,10 @@ actions.execute+=/execute
 	if Ravager:Usable() and not DeadlyCalm:Up() and (ColossusSmash:Ready(2) or (Warbreaker.known and Warbreaker:Ready(2))) then
 		UseCooldown(Ravager)
 	end
-	if ColossusSmash:Usable() and ColossusSmash:Down() then
+	if ColossusSmash:Usable() and ColossusSmash.debuff:Down() then
 		return ColossusSmash
 	end
-	if Warbreaker:Usable() and ColossusSmash:Down() then
+	if Warbreaker:Usable() and ColossusSmash.debuff:Down() then
 		return Warbreaker
 	end
 	if DeadlyCalm:Usable() then
@@ -1463,13 +1488,13 @@ actions.five_target+=/whirlwind
 	if Ravager:Usable() and (not Warbreaker.known or Warbreaker:Ready(2)) then
 		UseCooldown(Ravager)
 	end
-	if ColossusSmash:Usable() and ColossusSmash:Down() then
+	if ColossusSmash:Usable() and ColossusSmash.debuff:Down() then
 		return ColossusSmash
 	end
-	if Warbreaker:Usable() and ColossusSmash:Down() then
+	if Warbreaker:Usable() and ColossusSmash.debuff:Down() then
 		return Warbreaker
 	end
-	if Bladestorm:Usable() and SweepingStrikes:Down() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash:Remains() > 4.5) or TestOfMight:Up()) then
+	if Bladestorm:Usable() and SweepingStrikes:Down() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash.debuff:Remains() > 4.5) or TestOfMight:Up()) then
 		UseCooldown(Bladestorm)
 	end
 	if DeadlyCalm:Usable() then
@@ -1485,7 +1510,7 @@ actions.five_target+=/whirlwind
 		return MortalStrike
 	end
 	if Whirlwind:Usable() then
-		if ColossusSmash:Up() or (CrushingAssault.known and FervorOfBattle.known and CrushingAssault:Up()) then
+		if ColossusSmash.debuff:Up() or (CrushingAssault.known and FervorOfBattle.known and CrushingAssault:Up()) then
 			return Whirlwind
 		end
 		if DeadlyCalm:Up() or Player.rage > 60 then
@@ -1544,7 +1569,7 @@ actions.single_target+=/rend,target_if=min:remains,if=refreshable&debuff.colossu
 actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5&(!azerite.test_of_might.enabled|debuff.colossus_smash.up)
 actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5
 ]]
-	if Rend:Usable() and Rend:Down() and ColossusSmash:Down() then
+	if Rend:Usable() and Rend:Down() and ColossusSmash.debuff:Down() then
 		return Rend
 	end
 	if Skullsplitter:Usable() and Player.rage < 60 and (not DeadlyCalm.known or DeadlyCalm:Down()) then
@@ -1553,10 +1578,10 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal
 	if Ravager:Usable() and not DeadlyCalm:Up() and (ColossusSmash:Ready(2) or (Warbreaker.known and Warbreaker:Ready(2))) then
 		UseCooldown(Ravager)
 	end
-	if ColossusSmash:Usable() and ColossusSmash:Down() then
+	if ColossusSmash:Usable() and ColossusSmash.debuff:Down() then
 		return ColossusSmash
 	end
-	if Warbreaker:Usable() and ColossusSmash:Down() then
+	if Warbreaker:Usable() and ColossusSmash.debuff:Down() then
 		return Warbreaker
 	end
 	if DeadlyCalm:Usable() then
@@ -1568,7 +1593,7 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal
 	if Rend:Usable() and Rend:Refreshable() and ColossusSmash:Cooldown() < 5 then
 		return Rend
 	end
-	if Bladestorm:Usable() and not MortalStrike:Ready() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash:Up()) or TestOfMight:Up()) then
+	if Bladestorm:Usable() and not MortalStrike:Ready() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash.debuff:Up()) or TestOfMight:Up()) then
 		UseCooldown(Bladestorm)
 	end
 	if Cleave:Usable() and Player.enemies > 2 then
@@ -1583,14 +1608,14 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal
 	if Overpower:Usable() then
 		return Overpower
 	end
-	if Rend:Usable() and Rend:Refreshable() and ColossusSmash:Down() then
+	if Rend:Usable() and Rend:Refreshable() and ColossusSmash.debuff:Down() then
 		return Rend
 	end
 	if MortalStrike:Ready(0.5) then
 		return MortalStrike
 	end
 	if FervorOfBattle.known then
-		if Whirlwind:Usable() and (not TestOfMight.known or ColossusSmash:Up()) then
+		if Whirlwind:Usable() and (not TestOfMight.known or ColossusSmash.debuff:Up()) then
 			return Whirlwind
 		end
 	else

@@ -733,9 +733,10 @@ local Charge = Ability:Add(100, false, true, 105771)
 Charge.buff_duration = 1
 Charge.cooldown_duration = 20
 Charge.requires_charge = true
-local HeroicLeap = Ability:Add(6544, false, true)
+local HeroicLeap = Ability:Add(6544, false, true, 52174)
 HeroicLeap.cooldown_duration = 45
 HeroicLeap.requires_charge = true
+HeroicLeap:AutoAoe()
 local HeroicThrow = Ability:Add(57755, false, true)
 HeroicThrow.cooldown_duration = 6
 local Pummel = Ability:Add(6552, false, true)
@@ -2111,6 +2112,11 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 				smashPreviousPanel.border:SetTexture('Interface\\AddOns\\Smash\\border.blp')
 				smashPreviousPanel.icon:SetTexture(ability.icon)
 				smashPreviousPanel:Show()
+			end
+			if Opt.auto_aoe then
+				if ability == SweepingStrikes and Player.target_mode < 2 then
+					Player:SetTargetMode(2)
+				end
 			end
 		end
 		return

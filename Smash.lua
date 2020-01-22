@@ -890,6 +890,10 @@ PurifyingBlast.cooldown_duration = 60
 PurifyingBlast.essence_id = 6
 PurifyingBlast.essence_major = true
 PurifyingBlast:AutoAoe(true)
+local ReapingFlames = Ability:Add(311195, false, true)
+ReapingFlames.cooldown_duration = 45
+ReapingFlames.essence_id = 35
+ReapingFlames.essence_major = true
 local RippleInSpace = Ability:Add(302731, true, true)
 RippleInSpace.buff_duration = 2
 RippleInSpace.cooldown_duration = 60
@@ -934,8 +938,7 @@ RecklessForce.essence_id = 28
 local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
 -- Racials
-local LightsJudgment = Ability:Add(255647, false, true)
-LightsJudgment.cooldown_duration = 150
+
 -- PvP talents
 
 -- Trinket Effects
@@ -1307,7 +1310,7 @@ end
 
 function Slam:Cost()
 	local cost = Ability.Cost(self)
-	if CrushingAssault.known and CrushingAssault:up() then
+	if CrushingAssault.known and CrushingAssault:Up() then
 		cost = cost - 20
 	end
 	return max(0, cost)
@@ -1373,31 +1376,71 @@ APL[SPEC.ARMS].main = function(self)
 			UseCooldown(BattleShout)
 		end
 	end
+	Player.lucid_active = MemoryOfLucidDreams.known and MemoryOfLucidDreams:Up()
 --[[
 actions=charge
 actions+=/auto_attack
-actions+=/potion
-actions+=/blood_fury,if=debuff.colossus_smash.up
-actions+=/berserking,if=debuff.colossus_smash.up
-actions+=/arcane_torrent,if=debuff.colossus_smash.down&cooldown.mortal_strike.remains>1.5&rage<50
+actions+=/potion,if=target.health.pct<21&buff.memory_of_lucid_dreams.up|!essence.memory_of_lucid_dreams.major
+actions+=/blood_fury,if=buff.memory_of_lucid_dreams.remains<5|(!essence.memory_of_lucid_dreams.major&debuff.colossus_smash.up)
+actions+=/berserking,if=buff.memory_of_lucid_dreams.up|(!essence.memory_of_lucid_dreams.major&debuff.colossus_smash.up)
+actions+=/arcane_torrent,if=cooldown.mortal_strike.remains>1.5&buff.memory_of_lucid_dreams.down&rage<50
 actions+=/lights_judgment,if=debuff.colossus_smash.down
-actions+=/fireblood,if=debuff.colossus_smash.up
-actions+=/ancestral_call,if=debuff.colossus_smash.up
+actions+=/fireblood,if=buff.memory_of_lucid_dreams.remains<5|(!essence.memory_of_lucid_dreams.major&debuff.colossus_smash.up)
+actions+=/ancestral_call,if=buff.memory_of_lucid_dreams.remains<5|(!essence.memory_of_lucid_dreams.major&debuff.colossus_smash.up)
+actions+=/bag_of_tricks,if=buff.memory_of_lucid_dreams.remains<5|(!essence.memory_of_lucid_dreams.major&debuff.colossus_smash.up)
+actions+=/use_item,name=ashvanes_razor_coral,if=!debuff.razor_coral_debuff.up|(target.health.pct<20.1&buff.memory_of_lucid_dreams.up&cooldown.memory_of_lucid_dreams.remains<117)|(target.health.pct<30.1&debuff.conductive_ink_debuff.up&!essence.memory_of_lucid_dreams.major)|(!debuff.conductive_ink_debuff.up&!essence.memory_of_lucid_dreams.major&debuff.colossus_smash.up)|target.time_to_die<30
 actions+=/avatar,if=cooldown.colossus_smash.remains<8|(talent.warbreaker.enabled&cooldown.warbreaker.remains<8)
 actions+=/sweeping_strikes,if=spell_targets.whirlwind>1&(cooldown.bladestorm.remains>10|cooldown.colossus_smash.remains>8|azerite.test_of_might.enabled)
+actions+=/blood_of_the_enemy,if=buff.test_of_might.up|(debuff.colossus_smash.up&!azerite.test_of_might.enabled)
+actions+=/purifying_blast,if=!debuff.colossus_smash.up&!buff.test_of_might.up
+actions+=/ripple_in_space,if=!debuff.colossus_smash.up&!buff.test_of_might.up
+actions+=/worldvein_resonance,if=!debuff.colossus_smash.up&!buff.test_of_might.up
+actions+=/focused_azerite_beam,if=!debuff.colossus_smash.up&!buff.test_of_might.up
+actions+=/reaping_flames,if=!debuff.colossus_smash.up&!buff.test_of_might.up
+actions+=/concentrated_flame,if=!debuff.colossus_smash.up&!buff.test_of_might.up&dot.concentrated_flame_burn.remains=0
+actions+=/the_unbound_force,if=buff.reckless_force.up
+actions+=/guardian_of_azeroth,if=cooldown.colossus_smash.remains<10
+actions+=/memory_of_lucid_dreams,if=!talent.warbreaker.enabled&cooldown.colossus_smash.remains<gcd&(target.time_to_die>150|target.health.pct<20)
+actions+=/memory_of_lucid_dreams,if=talent.warbreaker.enabled&cooldown.warbreaker.remains<gcd&(target.time_to_die>150|target.health.pct<20)
 actions+=/run_action_list,name=hac,if=raid_event.adds.exists
 actions+=/run_action_list,name=five_target,if=spell_targets.whirlwind>4
 actions+=/run_action_list,name=execute,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
 actions+=/run_action_list,name=single_target
 ]]
-	if LightsJudgment:Usable() and ColossusSmash.debuff:Down() and Target.timeToDie > 4 then
-		UseExtra(LightsJudgment)
-	end
 	if Avatar:Usable() and (ColossusSmash.debuff:Remains() < 8 or (Warbreaker.known and Warbreaker:Ready(8))) then
 		UseCooldown(Avatar)
 	end
 	if SweepingStrikes:Ready() and Player.enemies > 1 and (not Bladestorm:Ready(10) or not ColossusSmash:Ready(8) or TestOfMight.known) then
 		UseCooldown(SweepingStrikes)
+	end
+	if BloodOfTheEnemy:Usable() and (TestOfMight:Up() or (ColossusSmash.debuff:Up() and not TestOfMight.known)) then
+		UseCooldown(BloodOfTheEnemy)
+	end
+	if MemoryOfLucidDreams.known then
+		if MemoryOfLucidDreams:Usable() and Target.timeToDie > 8 and (Target.timeToDie > 150 or Target.healthPercentage < 20) and (ColossusSmash.known and ColossusSmash:Ready(Player.gcd) or Warbreaker.known and Warbreaker:Ready(Player.gcd)) then
+			UseCooldown(MemoryOfLucidDreams)
+		end
+	else
+		if ColossusSmash.debuff:Down() and TestOfMight:Down() then
+			if PurifyingBlast:Usable() then
+				UseCooldown(PurifyingBlast)
+			elseif RippleInSpace:Usable() then
+				UseCooldown(RippleInSpace)
+			elseif WorldveinResonance:Usable() and Lifeblood:Stack() < 4 then
+				UseCooldown(WorldveinResonance)
+			elseif FocusedAzeriteBeam:Usable() then
+				UseCooldown(FocusedAzeriteBeam)
+			elseif ReapingFlames:Usable() then
+				UseCooldown(ReapingFlames)
+			elseif ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() then
+				UseCooldown(ConcentratedFlame)
+			end
+		end
+		if TheUnboundForce:Usable() and RecklessForce:Up() then
+			UseCooldown(TheUnboundForce)
+		elseif GuardianOfAzeroth:Usable() and (ColossusSmash.known and ColossusSmash:Ready(10) or Warbreaker.known and Warbreaker:Ready(10)) then
+			UseCooldown(GuardianOfAzeroth)
+		end
 	end
 	if Player.enemies >= 5 then
 		return self:five_target()
@@ -1413,47 +1456,49 @@ end
 
 APL[SPEC.ARMS].execute = function(self)
 --[[
-actions.execute=skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
+actions.execute=skullsplitter,if=rage<60&buff.deadly_calm.down&buff.memory_of_lucid_dreams.down
 actions.execute+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
-actions.execute+=/colossus_smash,if=debuff.colossus_smash.down
-actions.execute+=/warbreaker,if=debuff.colossus_smash.down
+actions.execute+=/colossus_smash,if=!essence.memory_of_lucid_dreams.major|(buff.memory_of_lucid_dreams.up|cooldown.memory_of_lucid_dreams.remains>10)
+actions.execute+=/warbreaker,if=!essence.memory_of_lucid_dreams.major|(buff.memory_of_lucid_dreams.up|cooldown.memory_of_lucid_dreams.remains>10)
 actions.execute+=/deadly_calm
-actions.execute+=/bladestorm,if=rage<30&!buff.deadly_calm.up
+actions.execute+=/bladestorm,if=!buff.memory_of_lucid_dreams.up&buff.test_of_might.up&rage<30&!buff.deadly_calm.up
 actions.execute+=/cleave,if=spell_targets.whirlwind>2
-actions.execute+=/slam,if=buff.crushing_assault.up
+actions.execute+=/slam,if=buff.crushing_assault.up&buff.memory_of_lucid_dreams.down
 actions.execute+=/mortal_strike,if=buff.overpower.stack=2&talent.dreadnaught.enabled|buff.executioners_precision.stack=2
-actions.execute+=/execute,if=buff.deadly_calm.up
+actions.execute+=/execute,if=buff.memory_of_lucid_dreams.up|buff.deadly_calm.up|(buff.test_of_might.up&cooldown.memory_of_lucid_dreams.remains>94)
 actions.execute+=/overpower
 actions.execute+=/execute
 ]]
-	if Skullsplitter:Usable() and Player.rage < 60 and (not DeadlyCalm.known or DeadlyCalm:Down()) then
+	if Skullsplitter:Usable() and Player.rage < 60 and DeadlyCalm:Down() and not Player.lucid_active then
 		return Skullsplitter
 	end
-	if Ravager:Usable() and not DeadlyCalm:Up() and (ColossusSmash:Ready(2) or (Warbreaker.known and Warbreaker:Ready(2))) then
+	if Ravager:Usable() and DeadlyCalm:Down() and (ColossusSmash.known and ColossusSmash:Ready(2) or Warbreaker.known and Warbreaker:Ready(2)) then
 		UseCooldown(Ravager)
 	end
-	if ColossusSmash:Usable() and ColossusSmash.debuff:Down() then
-		return ColossusSmash
-	end
-	if Warbreaker:Usable() and ColossusSmash.debuff:Down() then
-		return Warbreaker
+	if ColossusSmash.debuff:Down() and (not MemoryOfLucidDreams.known or Player.lucid_active or MemoryOfLucidDreams:Cooldown() > 10) then
+		if ColossusSmash:Usable() then
+			return ColossusSmash
+		end
+		if Warbreaker:Usable() then
+			return Warbreaker
+		end
 	end
 	if DeadlyCalm:Usable() then
 		UseCooldown(DeadlyCalm)
 	end
-	if Bladestorm:Usable() and Player.rage < 30 and not DeadlyCalm:Up() then
+	if Bladestorm:Usable() and Player.rage < 30 and not Player.lucid_active and TestOfMight:Up() and DeadlyCalm:Down() then
 		UseCooldown(Bladestorm)
 	end
 	if Cleave:Usable() and Player.enemies > 2 then
 		return Cleave
 	end
-	if CrushingAssault.known and Slam:Usable() and CrushingAssault:Up() then
+	if CrushingAssault.known and Slam:Usable() and CrushingAssault:Up() and not Player.lucid_active then
 		return Slam
 	end
 	if MortalStrike:Usable() and (Dreadnaught.known and Overpower:Stack() == 2 or ExecutionersPrecision.known and ExecutionersPrecision:Stack() == 2) then
 		return MortalStrike
 	end
-	if Execute:Usable() and DeadlyCalm:Up() then
+	if Execute:Usable() and (Player.lucid_active or DeadlyCalm:Up() or (TestOfMight:Up() and MemoryOfLucidDreams:Cooldown() > 94)) then
 		return Execute
 	end
 	if Overpower:Usable() then
@@ -1461,9 +1506,6 @@ actions.execute+=/execute
 	end
 	if Execute:Usable() then
 		return Execute
-	end
-	if VictoryRush:Usable() then
-		return VictoryRush
 	end
 end
 
@@ -1524,9 +1566,6 @@ actions.five_target+=/whirlwind
 	if Whirlwind:Usable() then
 		return Whirlwind
 	end
-	if VictoryRush:Usable() then
-		return VictoryRush
-	end
 end
 
 APL[SPEC.ARMS].hac = function(self)
@@ -1553,36 +1592,36 @@ end
 APL[SPEC.ARMS].single_target = function(self)
 --[[
 actions.single_target=rend,if=!remains&debuff.colossus_smash.down
-actions.single_target+=/skullsplitter,if=rage<60&(!talent.deadly_calm.enabled|buff.deadly_calm.down)
+actions.single_target+=/skullsplitter,if=rage<60&buff.deadly_calm.down&buff.memory_of_lucid_dreams.down
 actions.single_target+=/ravager,if=!buff.deadly_calm.up&(cooldown.colossus_smash.remains<2|(talent.warbreaker.enabled&cooldown.warbreaker.remains<2))
-actions.single_target+=/colossus_smash,if=debuff.colossus_smash.down
-actions.single_target+=/warbreaker,if=debuff.colossus_smash.down
+actions.single_target+=/colossus_smash
+actions.single_target+=/warbreaker
 actions.single_target+=/deadly_calm
 actions.single_target+=/execute,if=buff.sudden_death.react
 actions.single_target+=/rend,if=refreshable&cooldown.colossus_smash.remains<5
-actions.single_target+=/bladestorm,if=cooldown.mortal_strike.remains&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.up&!azerite.test_of_might.enabled)|buff.test_of_might.up)
+actions.single_target+=/bladestorm,if=cooldown.mortal_strike.remains&(!talent.deadly_calm.enabled|buff.deadly_calm.down)&((debuff.colossus_smash.up&!azerite.test_of_might.enabled)|buff.test_of_might.up)&buff.memory_of_lucid_dreams.down&rage<40
 actions.single_target+=/cleave,if=spell_targets.whirlwind>2
-actions.single_target+=/overpower,if=azerite.seismic_wave.rank=3
+actions.single_target+=/overpower,if=(rage<30&buff.memory_of_lucid_dreams.up&debuff.colossus_smash.up)|(rage<70&buff.memory_of_lucid_dreams.down)
 actions.single_target+=/mortal_strike
-actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(buff.deadly_calm.up|rage>=60)
+actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(buff.memory_of_lucid_dreams.up|debuff.colossus_smash.up|buff.deadly_calm.up)
 actions.single_target+=/overpower
 actions.single_target+=/rend,target_if=min:remains,if=refreshable&debuff.colossus_smash.down
-actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5&(!azerite.test_of_might.enabled|debuff.colossus_smash.up)
-actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal_strike.remains>0.5
+actions.single_target+=/whirlwind,if=talent.fervor_of_battle.enabled&(buff.test_of_might.up|debuff.colossus_smash.down&buff.test_of_might.down&rage>60)
+actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled
 ]]
 	if Rend:Usable() and Rend:Down() and ColossusSmash.debuff:Down() then
 		return Rend
 	end
-	if Skullsplitter:Usable() and Player.rage < 60 and (not DeadlyCalm.known or DeadlyCalm:Down()) then
+	if Skullsplitter:Usable() and Player.rage < 60 and DeadlyCalm:Down() and not Player.lucid_active then
 		return Skullsplitter
 	end
-	if Ravager:Usable() and not DeadlyCalm:Up() and (ColossusSmash:Ready(2) or (Warbreaker.known and Warbreaker:Ready(2))) then
+	if Ravager:Usable() and not DeadlyCalm:Up() and (ColossusSmash.known and ColossusSmash:Ready(2) or Warbreaker.known and Warbreaker:Ready(2)) then
 		UseCooldown(Ravager)
 	end
-	if ColossusSmash:Usable() and ColossusSmash.debuff:Down() then
+	if ColossusSmash:Usable() then
 		return ColossusSmash
 	end
-	if Warbreaker:Usable() and ColossusSmash.debuff:Down() then
+	if Warbreaker:Usable() then
 		return Warbreaker
 	end
 	if DeadlyCalm:Usable() then
@@ -1594,16 +1633,19 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal
 	if Rend:Usable() and Rend:Refreshable() and ColossusSmash:Cooldown() < 5 then
 		return Rend
 	end
-	if Bladestorm:Usable() and not MortalStrike:Ready() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash.debuff:Up()) or TestOfMight:Up()) then
+	if Bladestorm:Usable() and Player.rage < 40 and not MortalStrike:Ready() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash.debuff:Up()) or TestOfMight:Up()) and not Player.lucid_active then
 		UseCooldown(Bladestorm)
 	end
 	if Cleave:Usable() and Player.enemies > 2 then
 		return Cleave
 	end
+	if Overpower:Usable() and ((Player.rage < 30 and Player.lucid_active and ColossusSmash.debuff:Up()) or (Player.rage < 70 and not Player.lucid_active)) then
+		return Overpower
+	end
 	if MortalStrike:Usable() then
 		return MortalStrike
 	end
-	if FervorOfBattle.known and Whirlwind:Usable() and (DeadlyCalm:Up() or Player.rage >= 60) then
+	if FervorOfBattle.known and Whirlwind:Usable() and (Player.lucid_active or ColossusSmash.debuff:Up() or DeadlyCalm:Up()) then
 		return Whirlwind
 	end
 	if Overpower:Usable() then
@@ -1616,16 +1658,21 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled&cooldown.mortal
 		return MortalStrike
 	end
 	if FervorOfBattle.known then
-		if Whirlwind:Usable() and (not TestOfMight.known or ColossusSmash.debuff:Up()) then
+		if Whirlwind:Usable() and (TestOfMight:Up() or Player.rage > 60 and ColossusSmash.debuff:Down()) then
 			return Whirlwind
 		end
 	else
-		if Slam:Usable() then
+		if Slam:Usable() and (Player.rage >= 50 or not MortalStrike:Ready(0.5)) then
 			return Slam
 		end
 	end
-	if VictoryRush:Usable() then
-		return VictoryRush
+	if Victorious:Up() and (Player.rage < 20 or not MortalStrike:Ready(1)) then
+		if VictoryRush:Usable() then
+			return VictoryRush
+		end
+		if ImpendingVictory:Usable() then
+			return ImpendingVictory
+		end
 	end
 end
 

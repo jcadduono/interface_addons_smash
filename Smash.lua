@@ -1222,9 +1222,10 @@ end
 function Target:UpdateHealth()
 	timer.health = 0
 	self.health = UnitHealth('target')
+	self.healthMax = UnitHealthMax('target')
 	table.remove(self.healthArray, 1)
 	self.healthArray[15] = self.health
-	self.timeToDieMax = self.health / UnitHealthMax('player') * 15
+	self.timeToDieMax = self.health / self.healthMax * 15
 	self.healthPercentage = self.healthMax > 0 and (self.health / self.healthMax * 100) or 100
 	self.healthLostPerSec = (self.healthArray[1] - self.health) / 3
 	self.timeToDie = self.healthLostPerSec > 0 and min(self.timeToDieMax, self.health / self.healthLostPerSec) or self.timeToDieMax
@@ -1243,14 +1244,13 @@ function Target:Update()
 		self.classification = 'normal'
 		self.player = false
 		self.level = UnitLevel('player')
-		self.healthMax = 0
 		self.hostile = true
 		local i
 		for i = 1, 15 do
 			self.healthArray[i] = 0
 		end
+		self:UpdateHealth()
 		if Opt.always_on then
-			self:UpdateHealth()
 			UI:UpdateCombat()
 			smashPanel:Show()
 			return true
@@ -1272,8 +1272,8 @@ function Target:Update()
 	self.classification = UnitClassification('target')
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
-	self.healthMax = UnitHealthMax('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
+	self:UpdateHealth()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
 		if self.level == -1 or (Player.instance == 'party' and self.level >= UnitLevel('player') + 2) then
 			self.boss = true
@@ -1283,7 +1283,6 @@ function Target:Update()
 		end
 	end
 	if self.hostile or Opt.always_on then
-		self:UpdateHealth()
 		UI:UpdateCombat()
 		smashPanel:Show()
 		return true

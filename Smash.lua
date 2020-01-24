@@ -174,16 +174,20 @@ smashPanel.text = CreateFrame('Frame', nil, smashPanel)
 smashPanel.text:SetAllPoints(smashPanel)
 smashPanel.text.tl = smashPanel.text:CreateFontString(nil, 'OVERLAY')
 smashPanel.text.tl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.tl:SetPoint('TOPLEFT', smashPanel, 'TOPLEFT', 3, -3)
+smashPanel.text.tl:SetPoint('TOPLEFT', smashPanel, 'TOPLEFT', 2.5, -3)
+smashPanel.text.tl:SetJustifyH('LEFT')
 smashPanel.text.tr = smashPanel.text:CreateFontString(nil, 'OVERLAY')
 smashPanel.text.tr:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.tr:SetPoint('TOPRIGHT', smashPanel, 'TOPRIGHT', -1.5, -3)
-smashPanel.text.br = smashPanel.text:CreateFontString(nil, 'OVERLAY')
-smashPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.br:SetPoint('BOTTOMRIGHT', smashPanel, 'BOTTOMRIGHT', -1.5, 3)
+smashPanel.text.tr:SetPoint('TOPRIGHT', smashPanel, 'TOPRIGHT', -2.5, -3)
+smashPanel.text.tr:SetJustifyH('RIGHT')
 smashPanel.text.bl = smashPanel.text:CreateFontString(nil, 'OVERLAY')
 smashPanel.text.bl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.bl:SetPoint('BOTTOMLEFT', smashPanel, 'BOTTOMLEFT', -3, 3)
+smashPanel.text.bl:SetPoint('BOTTOMLEFT', smashPanel, 'BOTTOMLEFT', 2.5, 3)
+smashPanel.text.bl:SetJustifyH('LEFT')
+smashPanel.text.br = smashPanel.text:CreateFontString(nil, 'OVERLAY')
+smashPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
+smashPanel.text.br:SetPoint('BOTTOMRIGHT', smashPanel, 'BOTTOMRIGHT', -2.5, 3)
+smashPanel.text.br:SetJustifyH('RIGHT')
 smashPanel.button = CreateFrame('Button', nil, smashPanel)
 smashPanel.button:SetAllPoints(smashPanel)
 smashPanel.button:RegisterForClicks('LeftButtonDown', 'RightButtonDown', 'MiddleButtonDown')
@@ -1222,12 +1226,12 @@ end
 function Target:UpdateHealth()
 	timer.health = 0
 	self.health = UnitHealth('target')
-	self.healthMax = UnitHealthMax('target')
+	self.health_max = UnitHealthMax('target')
 	table.remove(self.healthArray, 1)
-	self.healthArray[15] = self.health
-	self.timeToDieMax = self.health / self.healthMax * 15
-	self.healthPercentage = self.healthMax > 0 and (self.health / self.healthMax * 100) or 100
-	self.healthLostPerSec = (self.healthArray[1] - self.health) / 3
+	self.healthArray[25] = self.health
+	self.timeToDieMax = self.health / Player.health_max * 15
+	self.healthPercentage = self.health_max > 0 and (self.health / self.health_max * 100) or 100
+	self.healthLostPerSec = (self.healthArray[1] - self.health) / 5
 	self.timeToDie = self.healthLostPerSec > 0 and min(self.timeToDieMax, self.health / self.healthLostPerSec) or self.timeToDieMax
 end
 
@@ -1246,7 +1250,7 @@ function Target:Update()
 		self.level = UnitLevel('player')
 		self.hostile = true
 		local i
-		for i = 1, 15 do
+		for i = 1, 25 do
 			self.healthArray[i] = 0
 		end
 		self:UpdateHealth()
@@ -1263,7 +1267,7 @@ function Target:Update()
 	if guid ~= self.guid then
 		self.guid = guid
 		local i
-		for i = 1, 15 do
+		for i = 1, 25 do
 			self.healthArray[i] = UnitHealth('target')
 		end
 	end
@@ -1278,7 +1282,7 @@ function Target:Update()
 		if self.level == -1 or (Player.instance == 'party' and self.level >= UnitLevel('player') + 2) then
 			self.boss = true
 			self.stunnable = false
-		elseif Player.instance == 'raid' or (self.healthMax > Player.health_max * 10) then
+		elseif Player.instance == 'raid' or (self.health_max > Player.health_max * 10) then
 			self.stunnable = false
 		end
 	end
@@ -1979,6 +1983,7 @@ function UI:UpdateDisplay()
 	smashPanel.dimmer:SetShown(dim)
 	smashPanel.text.tl:SetText(text_tl)
 	smashPanel.text.tr:SetText(text_tr)
+	--smashPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
 
 function UI:UpdateCombat()
@@ -1986,9 +1991,6 @@ function UI:UpdateCombat()
 	local _, start, duration, remains, spellId
 	Player.ctime = GetTime()
 	Player.time = Player.ctime - Player.time_diff
-	Player.last_main = Player.main
-	Player.last_cd = Player.cd
-	Player.last_extra = Player.extra
 	Player.main =  nil
 	Player.cd = nil
 	Player.interrupt = nil
@@ -2242,7 +2244,6 @@ function events:PLAYER_REGEN_ENABLED()
 		autoAoe:Clear()
 		autoAoe:Update()
 	end
-	Player.opener_done = nil
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
@@ -2646,7 +2647,7 @@ function SlashCmdList.Smash(msg, editbox)
 	if msg[1] == 'reset' then
 		smashPanel:ClearAllPoints()
 		smashPanel:SetPoint('CENTER', 0, -169)
-		SnapAllPanels()
+		UI:SnapAllPanels()
 		return Status('Position has been reset to', 'default')
 	end
 	print('Smash (version: |cFFFFD000' .. GetAddOnMetadata('Smash', 'Version') .. '|r) - Commands:')

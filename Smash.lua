@@ -1410,39 +1410,41 @@ actions+=/run_action_list,name=five_target,if=spell_targets.whirlwind>4
 actions+=/run_action_list,name=execute,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
 actions+=/run_action_list,name=single_target
 ]]
-	if Avatar:Usable() and (ColossusSmash.debuff:Remains() < 8 or (Warbreaker.known and Warbreaker:Ready(8))) then
+	if Avatar:Usable() and (ColossusSmash.known and ColossusSmash:Ready(8) or Warbreaker.known and Warbreaker:Ready(8)) then
 		UseCooldown(Avatar)
 	end
 	if SweepingStrikes:Ready() and Player.enemies > 1 and (not Bladestorm:Ready(10) or not ColossusSmash:Ready(8) or TestOfMight.known) then
 		UseCooldown(SweepingStrikes)
 	end
-	if BloodOfTheEnemy:Usable() and (TestOfMight:Up() or (ColossusSmash.debuff:Up() and not TestOfMight.known)) then
-		UseCooldown(BloodOfTheEnemy)
-	end
 	if MemoryOfLucidDreams.known then
-		if MemoryOfLucidDreams:Usable() and Target.timeToDie > 8 and (Target.timeToDie > 150 or Target.healthPercentage < 20) and (ColossusSmash.known and ColossusSmash:Ready(Player.gcd) or Warbreaker.known and Warbreaker:Ready(Player.gcd)) then
+		if MemoryOfLucidDreams:Usable() and Target.timeToDie > 8 and (Target.timeToDie > 150 or Target.healthPercentage < 20 or (Massacre.known and Target.healthPercentage < 35 and Target.timeToDie < (TestOfMight.known and 24 or 12))) and (ColossusSmash.known and ColossusSmash:Ready(Player.gcd) or Warbreaker.known and Warbreaker:Ready(Player.gcd)) then
 			UseCooldown(MemoryOfLucidDreams)
 		end
-	else
-		if ColossusSmash.debuff:Down() and TestOfMight:Down() then
-			if PurifyingBlast:Usable() then
-				UseCooldown(PurifyingBlast)
-			elseif RippleInSpace:Usable() then
-				UseCooldown(RippleInSpace)
-			elseif WorldveinResonance:Usable() and Lifeblood:Stack() < 4 then
-				UseCooldown(WorldveinResonance)
-			elseif FocusedAzeriteBeam:Usable() then
-				UseCooldown(FocusedAzeriteBeam)
-			elseif ReapingFlames:Usable() then
-				UseCooldown(ReapingFlames)
-			elseif ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() then
-				UseCooldown(ConcentratedFlame)
-			end
+	elseif BloodOfTheEnemy.known then
+		if BloodOfTheEnemy:Usable() and ((not TestOfMight.known and ColossusSmash.debuff:Up()) or TestOfMight:Up()) then
+			UseCooldown(BloodOfTheEnemy)
 		end
+	elseif TheUnboundForce.known then
 		if TheUnboundForce:Usable() and RecklessForce:Up() then
 			UseCooldown(TheUnboundForce)
-		elseif GuardianOfAzeroth:Usable() and (ColossusSmash.known and ColossusSmash:Ready(10) or Warbreaker.known and Warbreaker:Ready(10)) then
+		end
+	elseif GuardianOfAzeroth.known then
+		if GuardianOfAzeroth:Usable() and (ColossusSmash.known and ColossusSmash:Ready(10) or Warbreaker.known and Warbreaker:Ready(10)) then
 			UseCooldown(GuardianOfAzeroth)
+		end
+	elseif ColossusSmash.debuff:Down() and TestOfMight:Down() then
+		if PurifyingBlast:Usable() then
+			UseCooldown(PurifyingBlast)
+		elseif RippleInSpace:Usable() then
+			UseCooldown(RippleInSpace)
+		elseif WorldveinResonance:Usable() and Lifeblood:Stack() < 4 then
+			UseCooldown(WorldveinResonance)
+		elseif FocusedAzeriteBeam:Usable() then
+			UseCooldown(FocusedAzeriteBeam)
+		elseif ReapingFlames:Usable() then
+			UseCooldown(ReapingFlames)
+		elseif ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() then
+			UseCooldown(ConcentratedFlame)
 		end
 	end
 	if Player.enemies >= 5 then

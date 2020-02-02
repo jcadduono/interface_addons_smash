@@ -3,5 +3,5 @@
 ## Notes: Smash is an addon for warriors that simplifies gameplay and maximizes DPS by doing all the decision making for you
 ## Author: jcadduono @ curseforge.com or Spy#1955 @ BattleTag
 ## SavedVariablesPerCharacter: Smash
-## Version: 8.3.0-0
+## Version: 8.3.0-1
 Smash.lua

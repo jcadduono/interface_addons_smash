@@ -1333,6 +1333,13 @@ function VictoryRush:Usable()
 	return Ability.Usable(self)
 end
 
+function ConcentratedFlame.dot:Remains()
+	if ConcentratedFlame:Traveling() then
+		return self:Duration()
+	end
+	return Ability.Remains(self)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)

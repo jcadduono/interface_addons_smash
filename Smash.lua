@@ -1855,7 +1855,7 @@ actions+=/call_action_list,name=st
 	if Opt.pot and Opt.boss and not Player:InArenaOrBattleground() and SuperiorBattlePotionOfStrength:Usable() and (Avatar:Up() or Target.timeToDie < 25) then
 		UseCooldown(SuperiorBattlePotionOfStrength)
 	end
-	if IgnorePain:Usable() and Player:RageDeficit() < (25 + (BoomingVoice.known and DemoralizingShout:Ready() and 20 or 0)) then
+	if IgnorePain:Usable() and Player:RageDeficit() < (25 + (BoomingVoice.known and DemoralizingShout:Ready() and 20 or 0)) and (IgnorePain:Down() or ShieldBlock:Up()) then
 		UseExtra(IgnorePain)
 	end
 	if WorldveinResonance:Usable() and Avatar:Ready(2) then
@@ -1909,7 +1909,7 @@ actions.aoe+=/shield_slam
 	if Ravager:Usable() then
 		UseCooldown(Ravager)
 	end
-	if ShieldBlock:Usable() and ShieldSlam:Ready() and ShieldBlock:Down() then
+	if ShieldBlock:Usable() and ShieldSlam:Ready(0.5) and ShieldBlock:Down() then
 		UseExtra(ShieldBlock)
 	end
 	if ShieldSlam:Usable() then
@@ -1949,7 +1949,7 @@ actions.st+=/devastate
 	if UnstoppableForce.known and Player.enemies == 2 and ThunderClap:Usable() and Avatar:Up() then
 		return ThunderClap
 	end
-	if ShieldBlock:Usable() and ShieldSlam:Ready() and ShieldBlock:Down() then
+	if ShieldBlock:Usable() and ShieldSlam:Ready(0.5) and ShieldBlock:Down() then
 		UseExtra(ShieldBlock)
 	end
 	if ShieldSlam:Usable() and ShieldBlock:Up() then

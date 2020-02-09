@@ -737,6 +737,7 @@ local Charge = Ability:Add(100, false, true, 105771)
 Charge.buff_duration = 1
 Charge.cooldown_duration = 20
 Charge.requires_charge = true
+Charge.triggers_gcd = false
 local HeroicLeap = Ability:Add(6544, false, true, 52174)
 HeroicLeap.cooldown_duration = 45
 HeroicLeap.requires_charge = true
@@ -754,14 +755,28 @@ local Taunt = Ability:Add(355, false, true)
 Taunt.buff_duration = 3
 Taunt.cooldown_duration = 8
 Taunt.triggers_gcd = false
+local VictoryRush = Ability:Add(34428, false, true)
 ------ Procs
-
+local Victorious = Ability:Add(32216, true, true)
+Victorious.buff_duration = 20
 ------ Talents
-
----- Arms
+local AngerManagement = Ability:Add(152278, false, true)
 local Avatar = Ability:Add(107574, true, true)
 Avatar.buff_duration = 20
 Avatar.cooldown_duration = 90
+local DragonRoar = Ability:Add(118000, false, true)
+DragonRoar.buff_duration = 6
+DragonRoar.cooldown_duration = 35
+local ImpendingVictory = Ability:Add(202168, false, true)
+ImpendingVictory.cooldown_duration = 30
+ImpendingVictory.rage_cost = 10
+local Ravager = Ability:Add(152277, false, true)
+Ravager.buff_duration = 7
+Ravager.cooldown_duration = 60
+local StormBolt = Ability:Add(107570, false, false, 132169)
+StormBolt.buff_duration = 4
+StormBolt.cooldown_duration = 30
+---- Arms
 local Bladestorm = Ability:Add(227847, true, true, 50622)
 Bladestorm.buff_duration = 4
 Bladestorm.cooldown_duration = 60
@@ -786,11 +801,6 @@ MortalStrike.hasted_cooldown = true
 local Overpower = Ability:Add(7384, true, true, 60503)
 Overpower.buff_duration = 12
 Overpower.cooldown_duration = 12
-local Rend = Ability:Add(772, false, true)
-Rend.rage_cost = 30
-Rend.buff_duration = 12
-Rend.tick_interval = 3
-Rend.hasted_ticks = true
 local Slam = Ability:Add(1464, false, true)
 Slam.rage_cost = 20
 local SweepingStrikes = Ability:Add(260708, true, true)
@@ -802,7 +812,6 @@ Whirlwind:AutoAoe(true)
 local Hamstring = Ability:Add(1715, false, true)
 Hamstring.rage_cost = 10
 Hamstring.buff_duration = 15
-local VictoryRush = Ability:Add(34428, false, true)
 ------ Talents
 local Cleave = Ability:Add(845, false, true)
 Cleave.rage_cost = 20
@@ -815,13 +824,12 @@ DeadlyCalm.cooldown_duration = 60
 DeadlyCalm.triggers_gcd = false
 local Dreadnaught = Ability:Add(262150, false, true)
 local FervorOfBattle = Ability:Add(202316, false, true)
-local ImpendingVictory = Ability:Add(202168, false, true)
-ImpendingVictory.cooldown_duration = 30
-ImpendingVictory.rage_cost = 10
 local Massacre = Ability:Add(206315, false, true, 281001)
-local Ravager = Ability:Add(152277, false, true)
-Ravager.buff_duration = 7
-Ravager.cooldown_duration = 60
+local Rend = Ability:Add(772, false, true)
+Rend.rage_cost = 30
+Rend.buff_duration = 12
+Rend.tick_interval = 3
+Rend.hasted_ticks = true
 local Skullsplitter = Ability:Add(260643, false, true)
 Skullsplitter.cooldown_duration = 21
 Skullsplitter.hasted_cooldown = true
@@ -831,9 +839,6 @@ Warbreaker:AutoAoe(true)
 ------ Procs
 local SuddenDeath = Ability:Add(29725, true, true, 52437)
 SuddenDeath.buff_duration = 10
-local Victorious = Ability:Add(32216, true, true)
-Victorious.buff_duration = 20
-
 ---- Fury
 local Recklessness = Ability:Add(1719, true, true)
 Recklessness.buff_duration = 10
@@ -843,9 +848,57 @@ Recklessness.cooldown_duration = 90
 ------ Procs
 
 ---- Protection
-
+local DemoralizingShout = Ability:Add(1160, false, true)
+DemoralizingShout.buff_duration = 8
+DemoralizingShout.cooldown_duration = 45
+local Devastate = Ability:Add(20243, false, true)
+local IgnorePain = Ability:Add(190456, true, true)
+IgnorePain.buff_duration = 12
+IgnorePain.cooldown_duration = 1
+IgnorePain.rage_cost = 40
+IgnorePain.triggers_gcd = false
+local Intercept = Ability:Add(198304, false, true)
+Intercept.cooldown_duration = 15
+Intercept.requires_charge = true
+Intercept.triggers_gcd = false
+local LastStand = Ability:Add(12975, true, true)
+LastStand.buff_duration = 15
+LastStand.cooldown_duration = 120
+LastStand.triggers_gcd = false
+local Revenge = Ability:Add(6572, false, true)
+Revenge.cooldown_duration = 3
+Revenge.rage_cost = 30
+Revenge.hasted_cooldown = true
+Revenge:AutoAoe()
+Revenge.free = Ability:Add(5302, true, true)
+Revenge.free.buff_duration = 6
+local ShieldBlock = Ability:Add(2565, true, true, 132404)
+ShieldBlock.buff_duration = 6
+ShieldBlock.cooldown_duration = 16
+ShieldBlock.rage_cost = 30
+ShieldBlock.hasted_cooldown = true
+ShieldBlock.requires_charge = true
+ShieldBlock.triggers_gcd = false
+local ShieldSlam = Ability:Add(23922, false, true)
+ShieldSlam.cooldown_duration = 9
+ShieldSlam.hasted_cooldown = true
+local ShieldWall = Ability:Add(871, true, true)
+ShieldWall.buff_duration = 8
+ShieldWall.cooldown_duration = 240
+ShieldWall.triggers_gcd = false
+local Shockwave = Ability:Add(46968, false, true, 132168)
+Shockwave.buff_duration = 2
+Shockwave.cooldown_duration = 40
+Shockwave:AutoAoe()
+local ThunderClap = Ability:Add(6343, false, true)
+ThunderClap.buff_duration = 10
+ThunderClap.cooldown_duration = 6
+ThunderClap.hasted_cooldown = true
+ThunderClap:AutoAoe(true)
 ------ Talents
-
+local BoomingVoice = Ability:Add(202743, false, true)
+local Devastator = Ability:Add(236279, false, true)
+local UnstoppableForce = Ability:Add(275336, false, true)
 ------ Procs
 
 --- Azerite Traits
@@ -859,6 +912,10 @@ local TestOfMight = Ability:Add(275529, true, true, 275540)
 TestOfMight.buff_duration = 12
 -- Heart of Azeroth
 ---- Major Essences
+local AnimaOfDeath = Ability:Add(300003, false, true)
+AnimaOfDeath.cooldown_duration = 120
+AnimaOfDeath.essence_id = 24
+AnimaOfDeath.essence_major = true
 local BloodOfTheEnemy = Ability:Add(298277, false, true)
 BloodOfTheEnemy.buff_duration = 10
 BloodOfTheEnemy.cooldown_duration = 120
@@ -1195,6 +1252,10 @@ function Player:UpdateAbilities()
 	if VictoryRush.known or ImpendingVictory.known then
 		Victorious.known = true
 	end
+	if Devastator.known then
+		Devastate.known = false
+	end
+	Revenge.free.known = Revenge.known
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1326,8 +1387,22 @@ function Execute:Usable()
 	return Ability.Usable(self)
 end
 
+function Revenge:Cost()
+	if Revenge.free:Up() then
+		return 0
+	end
+	return Ability.Cost(self)
+end
+
 function VictoryRush:Usable()
 	if Victorious:Down() then
+		return false
+	end
+	return Ability.Usable(self)
+end
+
+function StormBolt:Usable()
+	if not Target.stunnable then
 		return false
 	end
 	return Ability.Usable(self)
@@ -1710,27 +1785,229 @@ end
 
 APL[SPEC.PROTECTION].main = function(self)
 	if Player:TimeInCombat() == 0 then
+--[[
+actions.precombat=flask
+actions.precombat+=/food
+actions.precombat+=/augmentation
+# Snapshot raid buffed stats before combat begins and pre-potting is done.
+actions.precombat+=/snapshot_stats
+actions.precombat+=/use_item,name=azsharas_font_of_power
+actions.precombat+=/worldvein_resonance
+actions.precombat+=/memory_of_lucid_dreams
+actions.precombat+=/guardian_of_azeroth
+actions.precombat+=/potion
+]]
 		if BattleShout:Usable() and BattleShout:Remains() < 300 then
 			return BattleShout
 		end
-		if Opt.pot and not Player:InArenaOrBattleground() then
+		if WorldveinResonance:Usable() then
+			UseCooldown(WorldveinResonance)
+		elseif MemoryOfLucidDreams:Usable() then
+			UseCooldown(MemoryOfLucidDreams)
+		elseif GuardianOfAzeroth:Usable() then
+			UseCooldown(GuardianOfAzeroth)
+		elseif Opt.pot and not Player:InArenaOrBattleground() then
 			if GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
 				UseCooldown(GreaterFlaskOfTheUndertow)
 			end
-			if Target.boss and PotionOfUnbridledFury:Usable() then
-				UseCooldown(PotionOfUnbridledFury)
+			if Target.boss and SuperiorBattlePotionOfStrength:Usable() then
+				UseCooldown(SuperiorBattlePotionOfStrength)
 			end
+		end
+		if Intercept:Usable() then
+			UseExtra(Intercept)
 		end
 	else
 		if BattleShout:Usable() and BattleShout:Remains() < 30 then
 			UseCooldown(BattleShout)
 		end
 	end
+--[[
+actions=auto_attack
+actions+=/intercept,if=time=0
+actions+=/use_items,if=cooldown.avatar.remains<=gcd|buff.avatar.up
+actions+=/blood_fury
+actions+=/berserking
+actions+=/arcane_torrent
+actions+=/lights_judgment
+actions+=/fireblood
+actions+=/ancestral_call
+actions+=/bag_of_tricks
+actions+=/potion,if=buff.avatar.up|target.time_to_die<25
+# use Ignore Pain to avoid rage capping
+actions+=/ignore_pain,if=rage.deficit<25+20*talent.booming_voice.enabled*cooldown.demoralizing_shout.ready
+actions+=/worldvein_resonance,if=cooldown.avatar.remains<=2
+actions+=/ripple_in_space
+actions+=/memory_of_lucid_dreams
+actions+=/concentrated_flame,if=buff.avatar.down&!dot.concentrated_flame_burn.remains>0|essence.the_crucible_of_flame.rank<3
+actions+=/last_stand,if=cooldown.anima_of_death.remains<=2
+actions+=/avatar
+actions+=/run_action_list,name=aoe,if=spell_targets.thunder_clap>=3
+actions+=/call_action_list,name=st
+]]
+	if Opt.trinket and (Avatar:Ready(Player.gcd) or Avatar:Up()) then
+		if Trinket1:Usable() then
+			UseCooldown(Trinket1)
+		elseif Trinket2:Usable() then
+			UseCooldown(Trinket2)
+		end
+	end
+	if Opt.pot and Opt.boss and not Player:InArenaOrBattleground() and SuperiorBattlePotionOfStrength:Usable() and (Avatar:Up() or Target.timeToDie < 25) then
+		UseCooldown(SuperiorBattlePotionOfStrength)
+	end
+	if IgnorePain:Usable() and Player:RageDeficit() < (25 + (BoomingVoice.known and DemoralizingShout:Ready() and 20 or 0)) then
+		UseExtra(IgnorePain)
+	end
+	if WorldveinResonance:Usable() and Avatar:Ready(2) then
+		UseCooldown(WorldveinResonance)
+	elseif RippleInSpace:Usable() then
+		UseCooldown(RippleInSpace)
+	elseif MemoryOfLucidDreams:Usable() then
+		UseCooldown(MemoryOfLucidDreams)
+	elseif ConcentratedFlame:Usable() and Avatar:Down() and ConcentratedFlame.dot:Down() then
+		UseCooldown(ConcentratedFlame)
+	elseif AnimaOfDeath.known and AnimaOfDeath:Ready(2) and LastStand:Usable() then
+		UseCooldown(LastStand)
+	elseif Avatar:Usable() then
+		UseCooldown(Avatar)
+	end
+	if Player.enemies >= 3 then
+		return self:aoe()
+	end
+	return self:st()
+end
+
+APL[SPEC.PROTECTION].aoe = function(self)
+--[[
+actions.aoe=thunder_clap
+actions.aoe+=/memory_of_lucid_dreams,if=buff.avatar.down
+actions.aoe+=/demoralizing_shout,if=talent.booming_voice.enabled
+actions.aoe+=/anima_of_death,if=buff.last_stand.up
+actions.aoe+=/dragon_roar
+actions.aoe+=/revenge
+actions.aoe+=/use_item,name=grongs_primal_rage,if=buff.avatar.down|cooldown.thunder_clap.remains>=4
+actions.aoe+=/ravager
+actions.aoe+=/shield_block,if=cooldown.shield_slam.ready&buff.shield_block.down
+actions.aoe+=/shield_slam
+]]
+	if ThunderClap:Usable() then
+		return ThunderClap
+	end
+	if MemoryOfLucidDreams:Usable() and Avatar:Down() then
+		UseCooldown(MemoryOfLucidDreams)
+	elseif BoomingVoice.known and DemoralizingShout:Usable() then
+		UseCooldown(DemoralizingShout)
+	elseif AnimaOfDeath:Usable() and LastStand:Up() then
+		UseCooldown(AnimaOfDeath)
+	end
+	if DragonRoar:Usable() then
+		return DragonRoar
+	end
+	if Revenge:Usable() then
+		return Revenge
+	end
+	if Ravager:Usable() then
+		UseCooldown(Ravager)
+	end
+	if ShieldBlock:Usable() and ShieldSlam:Ready() and ShieldBlock:Down() then
+		UseExtra(ShieldBlock)
+	end
+	if ShieldSlam:Usable() then
+		return ShieldSlam
+	end
+	if Victorious:Up() then
+		if VictoryRush:Usable() then
+			return VictoryRush
+		end
+		if ImpendingVictory:Usable() then
+			return ImpendingVictory
+		end
+	end
+	if ImpendingVictory:Usable() and Player:Rage() >= 40 and Player:HealthPct() < 80 then
+		return ImpendingVictory
+	end
+end
+
+APL[SPEC.PROTECTION].st = function(self)
+--[[
+actions.st=thunder_clap,if=spell_targets.thunder_clap=2&talent.unstoppable_force.enabled&buff.avatar.up
+actions.st+=/shield_block,if=cooldown.shield_slam.ready&buff.shield_block.down
+actions.st+=/shield_slam,if=buff.shield_block.up
+actions.st+=/thunder_clap,if=(talent.unstoppable_force.enabled&buff.avatar.up)
+actions.st+=/demoralizing_shout,if=talent.booming_voice.enabled
+actions.st+=/anima_of_death,if=buff.last_stand.up
+actions.st+=/shield_slam
+actions.st+=/use_item,name=ashvanes_razor_coral,target_if=debuff.razor_coral_debuff.stack=0
+actions.st+=/use_item,name=ashvanes_razor_coral,if=debuff.razor_coral_debuff.stack>7&(cooldown.avatar.remains<5|buff.avatar.up)
+actions.st+=/dragon_roar
+actions.st+=/thunder_clap
+actions.st+=/revenge
+actions.st+=/use_item,name=grongs_primal_rage,if=buff.avatar.down|cooldown.shield_slam.remains>=4
+actions.st+=/ravager
+actions.st+=/devastate
+]]
+	if UnstoppableForce.known and Player.enemies == 2 and ThunderClap:Usable() and Avatar:Up() then
+		return ThunderClap
+	end
+	if ShieldBlock:Usable() and ShieldSlam:Ready() and ShieldBlock:Down() then
+		UseExtra(ShieldBlock)
+	end
+	if ShieldSlam:Usable() and ShieldBlock:Up() then
+		return ShieldSlam
+	end
+	if UnstoppableForce.known and ThunderClap:Usable() and Avatar:Up() then
+		return ThunderClap
+	end
+	if BoomingVoice.known and DemoralizingShout:Usable() then
+		UseCooldown(DemoralizingShout)
+	elseif AnimaOfDeath:Usable() and LastStand:Up() then
+		UseCooldown(AnimaOfDeath)
+	end
+	if ShieldSlam:Usable() then
+		return ShieldSlam
+	end
+	if DragonRoar:Usable() then
+		return DragonRoar
+	end
+	if ThunderClap:Usable() then
+		return ThunderClap
+	end
+	if Revenge:Usable() then
+		return Revenge
+	end
+	if Ravager:Usable() then
+		UseCooldown(Ravager)
+	end
+	if Victorious:Up() then
+		if VictoryRush:Usable() then
+			return VictoryRush
+		end
+		if ImpendingVictory:Usable() then
+			return ImpendingVictory
+		end
+	end
+	if ImpendingVictory:Usable() and Player:Rage() >= 40 and Player:HealthPct() < 80 then
+		return ImpendingVictory
+	end
+	if Devastate:Usable() then
+		return Devastate
+	end
 end
 
 APL.Interrupt = function(self)
 	if Pummel:Usable() then
 		return Pummel
+	end
+	if Target.stunnable then
+		if Shockwave:Usable() and Player.enemies >= 3 then
+			return Shockwave
+		end
+		if StormBolt:Usable() then
+			return StormBolt
+		end
+		if Shockwave:Usable() then
+			return Shockwave
+		end
 	end
 end
 

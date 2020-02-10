@@ -1903,7 +1903,7 @@ actions.aoe+=/shield_slam
 	if DragonRoar:Usable() then
 		return DragonRoar
 	end
-	if Revenge:Usable() then
+	if Revenge:Usable() and (Revenge.free:Up() or Player:Rage() >= 60 or (IgnorePain:Up() and (ShieldBlock:Up() or not ShieldBlock:Ready()))) then
 		return Revenge
 	end
 	if Ravager:Usable() then
@@ -1914,6 +1914,9 @@ actions.aoe+=/shield_slam
 	end
 	if ShieldSlam:Usable() then
 		return ShieldSlam
+	end
+	if Revenge:Usable() then
+		return Revenge
 	end
 	if Victorious:Up() then
 		if VictoryRush:Usable() then
@@ -1972,7 +1975,7 @@ actions.st+=/devastate
 	if ThunderClap:Usable() then
 		return ThunderClap
 	end
-	if Revenge:Usable() then
+	if Revenge:Usable() and (Revenge.free:Up() or Player:Rage() >= 60 or (IgnorePain:Up() and (ShieldBlock:Up() or not ShieldBlock:Ready()))) then
 		return Revenge
 	end
 	if Ravager:Usable() then

@@ -135,6 +135,7 @@ local Player = {
 	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
+		[174044] = true, -- Humming Black Dragonscale (parachute)
 	},
 }
 
@@ -817,7 +818,7 @@ local Cleave = Ability:Add(845, false, true)
 Cleave.rage_cost = 20
 Cleave.cooldown_duration = 9
 Cleave.hasted_cooldown = true
-Cleave:AutoAoe(true)
+Cleave:AutoAoe()
 local DeadlyCalm = Ability:Add(262228, true, true)
 DeadlyCalm.buff_duration = 6
 DeadlyCalm.cooldown_duration = 60
@@ -951,7 +952,7 @@ PurifyingBlast.cooldown_duration = 60
 PurifyingBlast.essence_id = 6
 PurifyingBlast.essence_major = true
 PurifyingBlast:AutoAoe(true)
-local ReapingFlames = Ability:Add(311195, false, true)
+local ReapingFlames = Ability:Add(310690, false, true)
 ReapingFlames.cooldown_duration = 45
 ReapingFlames.essence_id = 35
 ReapingFlames.essence_major = true
@@ -996,6 +997,8 @@ RealityShift.essence_id = 15
 local RecklessForce = Ability:Add(302932, true, true)
 RecklessForce.buff_duration = 3
 RecklessForce.essence_id = 28
+RecklessForce.counter = Ability:Add(302917, true, true)
+RecklessForce.counter.essence_id = 28
 local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
 -- Racials
@@ -2749,12 +2752,12 @@ function SlashCmdList.Smash(msg, editbox)
 			end
 			return Status('Interrupt ability icon scale', Opt.scale.interrupt, 'times')
 		end
-		if startsWith(msg[2], 'ex') or startsWith(msg[2], 'pet') then
+		if startsWith(msg[2], 'ex') then
 			if msg[3] then
 				Opt.scale.extra = tonumber(msg[3]) or 0.4
 				UI:UpdateScale()
 			end
-			return Status('Extra/Pet cooldown ability icon scale', Opt.scale.extra, 'times')
+			return Status('Extra cooldown ability icon scale', Opt.scale.extra, 'times')
 		end
 		if msg[2] == 'glow' then
 			if msg[3] then
@@ -2763,7 +2766,7 @@ function SlashCmdList.Smash(msg, editbox)
 			end
 			return Status('Action button glow scale', Opt.scale.glow, 'times')
 		end
-		return Status('Default icon scale options', '|cFFFFD000prev 0.7|r, |cFFFFD000main 1|r, |cFFFFD000cd 0.7|r, |cFFFFD000interrupt 0.4|r, |cFFFFD000pet 0.4|r, and |cFFFFD000glow 1|r')
+		return Status('Default icon scale options', '|cFFFFD000prev 0.7|r, |cFFFFD000main 1|r, |cFFFFD000cd 0.7|r, |cFFFFD000interrupt 0.4|r, |cFFFFD000extra 0.4|r, and |cFFFFD000glow 1|r')
 	end
 	if msg[1] == 'alpha' then
 		if msg[2] then
@@ -2800,12 +2803,12 @@ function SlashCmdList.Smash(msg, editbox)
 			end
 			return Status('Glowing ability buttons (interrupt icon)', Opt.glow.interrupt)
 		end
-		if startsWith(msg[2], 'ex') or startsWith(msg[2], 'pet') then
+		if startsWith(msg[2], 'ex') then
 			if msg[3] then
 				Opt.glow.extra = msg[3] == 'on'
 				UI:UpdateGlows()
 			end
-			return Status('Glowing ability buttons (extra/pet cooldown icon)', Opt.glow.extra)
+			return Status('Glowing ability buttons (extra cooldown icon)', Opt.glow.extra)
 		end
 		if startsWith(msg[2], 'bliz') then
 			if msg[3] then
@@ -2823,7 +2826,7 @@ function SlashCmdList.Smash(msg, editbox)
 			end
 			return Status('Glow color', '|cFFFF0000' .. Opt.glow.color.r, '|cFF00FF00' .. Opt.glow.color.g, '|cFF0000FF' .. Opt.glow.color.b)
 		end
-		return Status('Possible glow options', '|cFFFFD000main|r, |cFFFFD000cd|r, |cFFFFD000interrupt|r, |cFFFFD000pet|r, |cFFFFD000blizzard|r, and |cFFFFD000color')
+		return Status('Possible glow options', '|cFFFFD000main|r, |cFFFFD000cd|r, |cFFFFD000interrupt|r, |cFFFFD000extra|r, |cFFFFD000blizzard|r, and |cFFFFD000color')
 	end
 	if startsWith(msg[1], 'prev') then
 		if msg[2] then

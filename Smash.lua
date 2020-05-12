@@ -938,10 +938,11 @@ local GuardianOfAzeroth = Ability:Add(295840, false, true)
 GuardianOfAzeroth.cooldown_duration = 180
 GuardianOfAzeroth.essence_id = 14
 GuardianOfAzeroth.essence_major = true
-local FocusedAzeriteBeam = Ability:Add(295258, false, true)
+local FocusedAzeriteBeam = Ability:Add(295258, false, true, 295261)
 FocusedAzeriteBeam.cooldown_duration = 90
 FocusedAzeriteBeam.essence_id = 5
 FocusedAzeriteBeam.essence_major = true
+FocusedAzeriteBeam:AutoAoe()
 local MemoryOfLucidDreams = Ability:Add(298357, true, true)
 MemoryOfLucidDreams.buff_duration = 15
 MemoryOfLucidDreams.cooldown_duration = 120
@@ -1083,6 +1084,7 @@ PotionOfUnbridledFury.buff.triggers_gcd = false
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
+Trinket.MerekthasFang = InventoryItem:Add(158367)
 -- End Inventory Items
 
 -- Start Azerite Trait API
@@ -1495,6 +1497,9 @@ actions+=/run_action_list,name=five_target,if=spell_targets.whirlwind>4
 actions+=/run_action_list,name=execute,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
 actions+=/run_action_list,name=single_target
 ]]
+	if Trinket.MerekthasFang:Usable() and not Player.lucid_active and Player.enemies > 1 and SweepingStrikes:Down() and ColossusSmash:Down() and (not TestOfMight.known or TestOfMight:Down()) then
+		UseCooldown(Trinket.MerekthasFang)
+	end
 	if Avatar:Usable() and (ColossusSmash.known and ColossusSmash:Ready(8) or Warbreaker.known and Warbreaker:Ready(8)) then
 		UseCooldown(Avatar)
 	end
@@ -1576,7 +1581,7 @@ actions.execute+=/execute
 	if DeadlyCalm:Usable() then
 		UseCooldown(DeadlyCalm)
 	end
-	if Bladestorm:Usable() and Player.rage < 30 and not Player.lucid_active and TestOfMight:Up() and DeadlyCalm:Down() then
+	if Bladestorm:Usable() and Player.rage < 30 and not Player.lucid_active and TestOfMight:Up() and ColossusSmash:Down() and DeadlyCalm:Down() then
 		UseCooldown(Bladestorm)
 	end
 	if Cleave:Usable() and Player.enemies > 2 then

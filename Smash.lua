@@ -1918,9 +1918,6 @@ actions.aoe+=/shield_slam
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if Revenge:Usable() then
-		return Revenge
-	end
 	if Victorious:Up() then
 		if VictoryRush:Usable() then
 			return VictoryRush

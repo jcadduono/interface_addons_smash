@@ -768,9 +768,11 @@ Avatar.cooldown_duration = 90
 local DragonRoar = Ability:Add(118000, false, true)
 DragonRoar.buff_duration = 6
 DragonRoar.cooldown_duration = 35
+DragonRoar:AutoAoe(true)
 local ImpendingVictory = Ability:Add(202168, false, true)
 ImpendingVictory.cooldown_duration = 30
 ImpendingVictory.rage_cost = 10
+local Massacre = Ability:Add(206315, false, true, 281001)
 local Ravager = Ability:Add(152277, false, true)
 Ravager.buff_duration = 7
 Ravager.cooldown_duration = 60
@@ -778,10 +780,11 @@ local StormBolt = Ability:Add(107570, false, false, 132169)
 StormBolt.buff_duration = 4
 StormBolt.cooldown_duration = 30
 ---- Arms
-local Bladestorm = Ability:Add(227847, true, true, 50622)
+local Bladestorm = Ability:Add(227847, true, true)
 Bladestorm.buff_duration = 4
 Bladestorm.cooldown_duration = 60
-Bladestorm:AutoAoe(true)
+Bladestorm.damage = Ability:Add(50622, false, true)
+Bladestorm.damage:AutoAoe(true)
 local ColossusSmash = Ability:Add(167105, false, true)
 ColossusSmash.cooldown_duration = 45
 ColossusSmash.debuff = Ability:Add(208086, false, true)
@@ -825,7 +828,6 @@ DeadlyCalm.cooldown_duration = 60
 DeadlyCalm.triggers_gcd = false
 local Dreadnaught = Ability:Add(262150, false, true)
 local FervorOfBattle = Ability:Add(202316, false, true)
-local Massacre = Ability:Add(206315, false, true, 281001)
 local Rend = Ability:Add(772, false, true)
 Rend.rage_cost = 30
 Rend.buff_duration = 12
@@ -841,13 +843,39 @@ Warbreaker:AutoAoe(true)
 local SuddenDeath = Ability:Add(29725, true, true, 52437)
 SuddenDeath.buff_duration = 10
 ---- Fury
+local Bloodthirst = Ability:Add(23881, false, true)
+Bloodthirst.cooldown_duration = 4.5
+Bloodthirst.hasted_cooldown = true
+local ExecuteFury = Ability:Add(5308, false, true)
+local RagingBlow = Ability:Add(85288, false, true)
+RagingBlow.cooldown_duration = 8
+RagingBlow.hasted_cooldown = true
+RagingBlow.requires_charge = true
+local Rampage = Ability:Add(184367, false, true)
+Rampage.rage_cost = 85
 local Recklessness = Ability:Add(1719, true, true)
 Recklessness.buff_duration = 10
 Recklessness.cooldown_duration = 90
+local WhirlwindFury = Ability:Add(190411, false, true, 199667)
+WhirlwindFury:AutoAoe(true)
+WhirlwindFury.buff = Ability:Add(85739, true, true)
+WhirlwindFury.buff.buff_duration = 20
 ------ Talents
-
+local BladestormFury = Ability:Add(46924, true, true)
+BladestormFury.buff_duration = 4
+BladestormFury.cooldown_duration = 60
+local Carnage = Ability:Add(202922, false, true)
+local FrothingBerserker = Ability:Add(215571, false, true)
+local FuriousSlash = Ability:Add(100130, true, true, 202539)
+FuriousSlash.buff_duration = 15
+local Siegebreaker = Ability:Add(280772, false, true, 280773)
+Siegebreaker.buff_duration = 10
+Siegebreaker.cooldown_duration = 30
+local SuddenDeathFury = Ability:Add(280721, true, true, 280776)
+SuddenDeathFury.buff_duration = 10
 ------ Procs
-
+local Enrage = Ability:Add(184361, true, true, 184362)
+Enrage.buff_duration = 4
 ---- Protection
 local DemoralizingShout = Ability:Add(1160, false, true)
 DemoralizingShout.buff_duration = 8
@@ -903,6 +931,7 @@ local UnstoppableForce = Ability:Add(275336, false, true)
 ------ Procs
 
 --- Azerite Traits
+local ColdSteelHotBlood = Ability:Add(288080, false, true)
 local CrushingAssault = Ability:Add(278751, true, true, 278826)
 CrushingAssault.buff_duration = 10
 local ExecutionersPrecision = Ability:Add(272866, false, true, 272870)
@@ -1242,6 +1271,9 @@ function Player:UpdateAbilities()
 		end
 	end
 
+	if Bladestorm.known or BladestormFury.known then
+		Bladestorm.damage.known = true
+	end
 	if Warbreaker.known then
 		ColossusSmash.known = false
 	end
@@ -1377,6 +1409,17 @@ function Execute:Cost()
 	return Ability.Cost(self)
 end
 
+function Rampage:Cost()
+	local cost = Ability.Cost(self)
+	if Carnage.known then
+		cost = cost - 10
+	end
+	if FrothingBerserker.known then
+		cost = cost + 10
+	end
+	return max(0, cost)
+end
+
 function Slam:Cost()
 	local cost = Ability.Cost(self)
 	if CrushingAssault.known and CrushingAssault:Up() then
@@ -1387,6 +1430,13 @@ end
 
 function Execute:Usable()
 	if (not SuddenDeath.known or not SuddenDeath:Up()) and Target.healthPercentage >= (Massacre.known and 35 or 20) then
+		return false
+	end
+	return Ability.Usable(self)
+end
+
+function ExecuteFury:Usable()
+	if (not SuddenDeathFury.known or not SuddenDeathFury:Up()) and Target.healthPercentage >= (Massacre.known and 35 or 20) then
 		return false
 	end
 	return Ability.Usable(self)
@@ -1784,10 +1834,133 @@ APL[SPEC.FURY].main = function(self)
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
+		if Charge:Usable() then
+			UseExtra(Charge)
+		end
 	else
 		if BattleShout:Usable() and BattleShout:Remains() < 30 then
 			UseCooldown(BattleShout)
 		end
+	end
+--[[
+actions+=/charge
+actions+=/heroic_leap,if=(raid_event.movement.distance>25&raid_event.movement.in>45)
+actions+=/potion,if=buff.guardian_of_azeroth.up|(!essence.condensed_lifeforce.major&target.time_to_die=60)
+actions+=/rampage,if=cooldown.recklessness.remains<3
+actions+=/blood_of_the_enemy,if=buff.recklessness.up
+actions+=/purifying_blast,if=!buff.recklessness.up&!buff.siegebreaker.up
+actions+=/ripple_in_space,if=!buff.recklessness.up&!buff.siegebreaker.up
+actions+=/worldvein_resonance,if=!buff.recklessness.up&!buff.siegebreaker.up
+actions+=/focused_azerite_beam,if=!buff.recklessness.up&!buff.siegebreaker.up
+actions+=/reaping_flames,if=!buff.recklessness.up&!buff.siegebreaker.up
+actions+=/concentrated_flame,if=!buff.recklessness.up&!buff.siegebreaker.up&dot.concentrated_flame_burn.remains=0
+actions+=/the_unbound_force,if=buff.reckless_force.up
+actions+=/guardian_of_azeroth,if=!buff.recklessness.up&(target.time_to_die>195|target.health.pct<20)
+actions+=/memory_of_lucid_dreams,if=!buff.recklessness.up
+actions+=/recklessness,if=!essence.condensed_lifeforce.major&!essence.blood_of_the_enemy.major|cooldown.guardian_of_azeroth.remains>1|buff.guardian_of_azeroth.up|cooldown.blood_of_the_enemy.remains<gcd
+actions+=/whirlwind,if=spell_targets.whirlwind>1&!buff.meat_cleaver.up
+actions+=/use_item,name=ashvanes_razor_coral,if=target.time_to_die<20|!debuff.razor_coral_debuff.up|(target.health.pct<30.1&debuff.conductive_ink_debuff.up)|(!debuff.conductive_ink_debuff.up&buff.memory_of_lucid_dreams.up|prev_gcd.2.guardian_of_azeroth|prev_gcd.2.recklessness&(!essence.memory_of_lucid_dreams.major&!essence.condensed_lifeforce.major))
+actions+=/blood_fury,if=buff.recklessness.up
+actions+=/berserking,if=buff.recklessness.up
+actions+=/lights_judgment,if=buff.recklessness.down&debuff.siegebreaker.down
+actions+=/fireblood,if=buff.recklessness.up
+actions+=/ancestral_call,if=buff.recklessness.up
+actions+=/bag_of_tricks,if=buff.recklessness.down&debuff.siegebreaker.down&buff.enrage.up
+actions+=/run_action_list,name=single_target
+]]
+	if Rampage:Usable() and Recklessness:Ready(3) then
+		return Rampage
+	end
+	if BloodOfTheEnemy.known then
+		if BloodOfTheEnemy:Usable() and Recklessness:Up() then
+			UseCooldown(BloodOfTheEnemy)
+		end
+	elseif TheUnboundForce.known then
+		if TheUnboundForce:Usable() and RecklessForce:Up() then
+			UseCooldown(TheUnboundForce)
+		end
+	elseif GuardianOfAzeroth.known then
+		if GuardianOfAzeroth:Usable() and Recklessness:Down() and (Target.timeToDie > 195 or Target.healthPercentage < 20) then
+			UseCooldown(GuardianOfAzeroth)
+		end
+	elseif MemoryOfLucidDreams.known then
+		if MemoryOfLucidDreams:Usable() and Recklessness:Down() then
+			UseCooldown(MemoryOfLucidDreams)
+		end
+	elseif Recklessness:Down() and Siegebreaker:Down() then
+		if PurifyingBlast:Usable() then
+			UseCooldown(PurifyingBlast)
+		elseif RippleInSpace:Usable() then
+			UseCooldown(RippleInSpace)
+		elseif WorldveinResonance:Usable() and Lifeblood:Stack() < 4 then
+			UseCooldown(WorldveinResonance)
+		elseif FocusedAzeriteBeam:Usable() then
+			UseCooldown(FocusedAzeriteBeam)
+		elseif ReapingFlames:Usable() then
+			UseCooldown(ReapingFlames)
+		elseif ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() then
+			UseCooldown(ConcentratedFlame)
+		end
+	end
+	if Recklessness:Usable() and (not GuardianOfAzeroth.known and not BloodOfTheEnemy.known or (GuardianOfAzeroth.known and (GuardianOfAzeroth:Cooldown() > 1 or GuardianOfAzeroth:Up()) or (BloodOfTheEnemy.known and BloodOfTheEnemy:Ready(Player.gcd)))) then
+		UseCooldown(Recklessness)
+	end
+	if Player.enemies > 1 and WhirlwindFury:Usable() and WhirlwindFury.buff:Down() then
+		return WhirlwindFury
+	end
+	return self:single_target()
+end
+
+APL[SPEC.FURY].single_target = function(self)
+--[[
+actions.single_target=siegebreaker
+actions.single_target+=/rampage,if=(buff.recklessness.up|buff.memory_of_lucid_dreams.up)|(talent.frothing_berserker.enabled|talent.carnage.enabled&(buff.enrage.remains<gcd|rage>90)|talent.massacre.enabled&(buff.enrage.remains<gcd|rage>90))
+actions.single_target+=/execute
+actions.single_target+=/furious_slash,if=!buff.bloodlust.up&buff.furious_slash.remains<3
+actions.single_target+=/bladestorm,if=prev_gcd.1.rampage
+actions.single_target+=/bloodthirst,if=buff.enrage.down|azerite.cold_steel_hot_blood.rank>1
+actions.single_target+=/dragon_roar,if=buff.enrage.up
+actions.single_target+=/raging_blow,if=charges=2
+actions.single_target+=/bloodthirst
+actions.single_target+=/raging_blow,if=talent.carnage.enabled|(talent.massacre.enabled&rage<80)|(talent.frothing_berserker.enabled&rage<90)
+actions.single_target+=/furious_slash,if=talent.furious_slash.enabled
+actions.single_target+=/whirlwind
+]]
+	if Siegebreaker:Usable() then
+		return Siegebreaker
+	end
+	if Rampage:Usable() and ((Recklessness:Up() or MemoryOfLucidDreams:Up()) or (FrothingBerserker.known or (Carnage.known or Massacre.known) and (Enrage:Remains() < Player.gcd or Player:Rage() > 90))) then
+		return Rampage
+	end
+	if ExecuteFury:Usable() then
+		return ExecuteFury
+	end
+	if FuriousSlash:Usable() and not Player:BloodlustActive() and FuriousSlash:Remains() < 3 then
+		return FuriousSlash
+	end
+	if BladestormFury:Usable() and Rampage:Previous() then
+		UseCooldown(BladestormFury)
+	end
+	if Bloodthirst:Usable() and (ColdSteelHotBlood:AzeriteRank() > 1 or Enrage:Down()) then
+		return Bloodthirst
+	end
+	if DragonRoar:Usable() and Enrage:Up() then
+		UseCooldown(DragonRoar)
+	end
+	if RagingBlow:Usable() and RagingBlow:Charges() >= 2 then
+		return RagingBlow
+	end
+	if Bloodthirst:Usable() then
+		return Bloodthirst
+	end
+	if RagingBlow:Usable() and (Carnage.known or (Massacre.known and Player:Rage() < 80) or (FrothingBerserker.known and Player:Rage() < 90)) then
+		return RagingBlow
+	end
+	if FuriousSlash:Usable() then
+		return FuriousSlash
+	end
+	if WhirlwindFury:Usable() then
+		return WhirlwindFury
 	end
 end
 

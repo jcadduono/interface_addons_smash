@@ -252,6 +252,15 @@ smashExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 smashExtraPanel.border = smashExtraPanel:CreateTexture(nil, 'ARTWORK')
 smashExtraPanel.border:SetAllPoints(smashExtraPanel)
 smashExtraPanel.border:SetTexture('Interface\\AddOns\\Smash\\border.blp')
+-- Fury Whirlwind stacks and duration remaining on extra icon
+smashExtraPanel.whirlwind = CreateFrame('Cooldown', nil, smashExtraPanel, 'CooldownFrameTemplate')
+smashExtraPanel.whirlwind:SetAllPoints(smashExtraPanel)
+smashExtraPanel.whirlwind.stack = smashExtraPanel.whirlwind:CreateFontString(nil, 'OVERLAY')
+smashExtraPanel.whirlwind.stack:SetFont('Fonts\\FRIZQT__.TTF', 18, 'OUTLINE')
+smashExtraPanel.whirlwind.stack:SetTextColor(1, 1, 1, 1)
+smashExtraPanel.whirlwind.stack:SetAllPoints(smashExtraPanel.whirlwind)
+smashExtraPanel.whirlwind.stack:SetJustifyH('CENTER')
+smashExtraPanel.whirlwind.stack:SetJustifyV('CENTER')
 
 -- Start AoE
 
@@ -1271,28 +1280,20 @@ function Player:UpdateAbilities()
 		end
 	end
 
-	if Bladestorm.known or BladestormFury.known then
-		Bladestorm.damage.known = true
-	end
-	if Warbreaker.known then
-		ColossusSmash.known = false
-	end
-	if ColossusSmash.known or Warbreaker.known then
-		ColossusSmash.debuff.known = true
-	end
 	if Ravager.known then
 		Bladestorm.known = false
 	end
 	if ImpendingVictory.known then
 		VictoryRush.known = false
 	end
-	if VictoryRush.known or ImpendingVictory.known then
-		Victorious.known = true
-	end
 	if Devastator.known then
 		Devastate.known = false
 	end
+	Bladestorm.damage.known = Bladestorm.known or BladestormFury.known
+	ColossusSmash.debuff.known = ColossusSmash.known or Warbreaker.known
 	Revenge.free.known = Revenge.known
+	Victorious.known = VictoryRush.known or ImpendingVictory.known
+	WhirlwindFury.buff.known = WhirlwindFury.known
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1440,6 +1441,39 @@ function ExecuteFury:Usable()
 		return false
 	end
 	return Ability.Usable(self)
+end
+
+function WhirlwindFury.buff:Stack()
+	local stack = Ability.Stack(self)
+	if self.pending_stack_use then
+		stack = stack - 1
+	end
+	return max(0, stack)
+end
+
+function WhirlwindFury.buff:Remains()
+	local remains = Ability.Remains(self)
+	if remains == 0 or self:Stack() == 0 then
+		return 0
+	end
+	return remains
+end
+
+function WhirlwindFury.buff:StartDurationStack()
+	local _, i, id, duration, expires, stack
+	for i = 1, 40 do
+		_, _, stack, _, duration, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
+		if not id then
+			return 0, 0, 0
+		end
+		if self:Match(id) then
+			if self.pending_stack_use then
+				stack = stack - 1
+			end
+			return expires - duration, duration, stack
+		end
+	end
+	return 0, 0, 0
 end
 
 function Revenge:Cost()
@@ -2515,6 +2549,19 @@ function UI:UpdateCombat()
 	smashCooldownPanel:SetShown(Player.cd)
 	smashExtraPanel:SetShown(Player.extra)
 
+	if Player.spec == SPEC.FURY then
+		local start, duration, stack = WhirlwindFury.buff:StartDurationStack()
+		if stack > 0 then
+			smashExtraPanel.whirlwind.stack:SetText(stack)
+			smashExtraPanel.whirlwind:SetCooldown(start, duration)
+			if not Player.extra then
+				smashExtraPanel.icon:SetTexture(WhirlwindFury.buff.icon)
+				smashExtraPanel:SetShown(true)
+			end
+		end
+		smashExtraPanel.whirlwind:SetShown(stack > 0)
+	end
+
 	self:UpdateDisplay()
 	self:UpdateGlows()
 end
@@ -2606,6 +2653,8 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	   eventType == 'SPELL_MISSED' or
 	   eventType == 'SPELL_AURA_APPLIED' or
 	   eventType == 'SPELL_AURA_REFRESH' or
+	   eventType == 'SPELL_AURA_APPLIED_DOSE' or
+	   eventType == 'SPELL_AURA_REMOVED_DOSE' or
 	   eventType == 'SPELL_AURA_REMOVED')
 	then
 		return
@@ -2633,11 +2682,26 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 					Player:SetTargetMode(2)
 				end
 			end
+			if Player.spec == SPEC.FURY then
+				if ability == WhirlwindFury then
+					WhirlwindFury.buff.pending_stack_use = false
+				elseif (
+					ability == Bloodthirst or ability == ExecuteFury or
+					ability == VictoryRush or ability == ImpendingVictory or
+					ability == RagingBlow or ability == FuriousSlash or
+					ability == Siegebreaker
+				) then
+					WhirlwindFury.buff.pending_stack_use = true
+				end
+			end
 		end
 		return
 	end
 
 	if dstGUID == Player.guid then
+		if ability == WhirlwindFury.buff and (eventType == 'SPELL_AURA_REMOVED' or eventType == 'SPELL_AURA_REMOVED_DOSE') then
+			ability.pending_stack_use = false
+		end
 		return -- ignore buffs beyond here
 	end
 	if ability.aura_targets then

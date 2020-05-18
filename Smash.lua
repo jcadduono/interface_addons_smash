@@ -1846,7 +1846,7 @@ APL[SPEC.FURY].main = function(self)
 actions+=/charge
 actions+=/heroic_leap,if=(raid_event.movement.distance>25&raid_event.movement.in>45)
 actions+=/potion,if=buff.guardian_of_azeroth.up|(!essence.condensed_lifeforce.major&target.time_to_die=60)
-actions+=/rampage,if=cooldown.recklessness.remains<3
+actions+=/rampage,if=cooldown.recklessness.remains<3&(spell_targets.whirlwind<2|buff.meat_cleaver.up)
 actions+=/blood_of_the_enemy,if=buff.recklessness.up
 actions+=/purifying_blast,if=!buff.recklessness.up&!buff.siegebreaker.up
 actions+=/ripple_in_space,if=!buff.recklessness.up&!buff.siegebreaker.up
@@ -1868,7 +1868,7 @@ actions+=/ancestral_call,if=buff.recklessness.up
 actions+=/bag_of_tricks,if=buff.recklessness.down&debuff.siegebreaker.down&buff.enrage.up
 actions+=/run_action_list,name=single_target
 ]]
-	if Rampage:Usable() and Recklessness:Ready(3) then
+	if Rampage:Usable() and Recklessness:Ready(3) and (Player.enemies == 1 or WhirlwindFury.buff:Up()) then
 		return Rampage
 	end
 	if BloodOfTheEnemy.known then

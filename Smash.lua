@@ -1945,7 +1945,7 @@ actions.single_target+=/whirlwind
 		return Bloodthirst
 	end
 	if DragonRoar:Usable() and Enrage:Up() then
-		UseCooldown(DragonRoar)
+		return DragonRoar
 	end
 	if RagingBlow:Usable() and RagingBlow:Charges() >= 2 then
 		return RagingBlow

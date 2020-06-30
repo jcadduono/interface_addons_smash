@@ -2382,15 +2382,15 @@ UI.anchor_points = {
 	blizzard = { -- Blizzard Personal Resource Display (Default)
 		[SPEC.ARMS] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
 		},
 		[SPEC.FURY] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
 		},
 		[SPEC.PROTECTION] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 42 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -18 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
 		},
 	},
 	kui = { -- Kui Nameplates
@@ -2432,7 +2432,7 @@ function UI:HookResourceFrame()
 		self.anchor.frame = KuiNameplatesPlayerAnchor
 	else
 		self.anchor.points = self.anchor_points.blizzard
-		self.anchor.frame = NamePlateDriverFrame:GetClassNameplateBar()
+		self.anchor.frame = NamePlateDriverFrame:GetClassNameplateManaBar()
 	end
 	if self.anchor.frame then
 		self.anchor.frame:HookScript('OnHide', self.OnResourceFrameHide)

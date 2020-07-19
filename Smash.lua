@@ -1666,7 +1666,7 @@ actions.execute+=/execute
 	if DeadlyCalm:Usable() then
 		UseCooldown(DeadlyCalm)
 	end
-	if Bladestorm:Usable() and Player.rage < 30 and not Player.lucid_active and TestOfMight:Up() and ColossusSmash:Down() and DeadlyCalm:Down() then
+	if Bladestorm:Usable() and Player.rage < 30 and not Player.lucid_active and TestOfMight:Remains() > 1.5 and ColossusSmash.debuff:Down() and DeadlyCalm:Down() then
 		UseCooldown(Bladestorm)
 	end
 	if Cleave:Usable() and Player.enemies > 2 then
@@ -1813,7 +1813,7 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled
 	if Rend:Usable() and Rend:Refreshable() and ColossusSmash:Cooldown() < 5 then
 		return Rend
 	end
-	if Bladestorm:Usable() and Player.rage < 40 and not MortalStrike:Ready() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash.debuff:Up()) or TestOfMight:Up()) and not Player.lucid_active then
+	if Bladestorm:Usable() and Player.rage < 40 and not Player.lucid_active and not MortalStrike:Ready() and (not DeadlyCalm.known or DeadlyCalm:Down()) and ((not TestOfMight.known and ColossusSmash.debuff:Up()) or (TestOfMight.known and ColossusSmash.debuff:Down() and TestOfMight:Remains() > 1.5)) then
 		UseCooldown(Bladestorm)
 	end
 	if Cleave:Usable() and Player.enemies > 2 then
@@ -1834,7 +1834,7 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled
 	if Rend:Usable() and Rend:Refreshable() and ColossusSmash.debuff:Down() then
 		return Rend
 	end
-	if MortalStrike:Ready(0.5) then
+	if MortalStrike:Ready(0.5 * Player.haste_factor) then
 		return MortalStrike
 	end
 	if FervorOfBattle.known then
@@ -1842,11 +1842,11 @@ actions.single_target+=/slam,if=!talent.fervor_of_battle.enabled
 			return Whirlwind
 		end
 	else
-		if Slam:Usable() and (Player.rage >= 50 or not MortalStrike:Ready(0.5)) then
+		if Slam:Usable() and (Player.rage >= 50 or not MortalStrike:Ready(0.5 * Player.haste_factor)) then
 			return Slam
 		end
 	end
-	if Victorious:Up() and (Player.rage < 20 or not MortalStrike:Ready(1)) then
+	if Victorious:Up() and (Player.rage < 20 or not MortalStrike:Ready(1 * Player.haste_factor)) then
 		if VictoryRush:Usable() then
 			return VictoryRush
 		end
@@ -2125,7 +2125,7 @@ actions.aoe+=/shield_slam
 	if Ravager:Usable() then
 		UseCooldown(Ravager)
 	end
-	if ShieldBlock:Usable() and ShieldSlam:Ready(0.5) and ShieldBlock:Down() then
+	if ShieldBlock:Usable() and ShieldSlam:Ready(0.5 * Player.haste_factor) and ShieldBlock:Down() then
 		UseExtra(ShieldBlock)
 	end
 	if ShieldSlam:Usable() then
@@ -2165,7 +2165,7 @@ actions.st+=/devastate
 	if UnstoppableForce.known and Player.enemies == 2 and ThunderClap:Usable() and Avatar:Up() then
 		return ThunderClap
 	end
-	if ShieldBlock:Usable() and ShieldSlam:Ready(0.5) and ShieldBlock:Down() then
+	if ShieldBlock:Usable() and ShieldSlam:Ready(0.5 * Player.haste_factor) and ShieldBlock:Down() then
 		UseExtra(ShieldBlock)
 	end
 	if ShieldSlam:Usable() and ShieldBlock:Up() then

@@ -151,6 +151,8 @@ local Player = {
 	equipped_mh = false,
 	equipped_oh = false,
 	equipped_shield = false,
+	last_swing_mh = 0,
+	last_swing_oh = 0,
 	next_swing_mh = 0,
 	next_swing_oh = 0,
 	last_swing_taken = 0,
@@ -421,6 +423,8 @@ function Ability:Add(spellId, buff, player)
 		rank = 0,
 		icon = false,
 		requires_charge = false,
+		requires_react = false,
+		requires_shield = false,
 		triggers_combat = false,
 		triggers_gcd = true,
 		hasted_duration = false,
@@ -474,6 +478,12 @@ function Ability:Usable(seconds, pool)
 		end
 	end
 	if self.requires_charge and self:Charges() == 0 then
+		return false
+	end
+	if self.requires_react and self:Down() then
+		return false
+	end
+	if self.requires_shield and not Player.equipped_shield then
 		return false
 	end
 	return self:Ready(seconds)
@@ -799,42 +809,32 @@ Bloodrage.buff.buff_duration = 10
 local Pummel = Ability:Add({6552, 6554}, false, true)
 Pummel.buff_duration = 4
 Pummel.cooldown_duration = 10
-Pummel.triggers_gcd = false
+Pummel.rage_cost = 10
 ---- Arms
 local BattleStance = Ability:Add({2457}, false, true)
 BattleStance.cooldown_duration = 1
 local Charge = Ability:Add({100, 6178, 11578}, false, true)
 Charge.cooldown_duration = 15
-local Cleave = Ability:Add({845, 7369, 11608, 11609, 20569}, false, true)
-Cleave.rage_cost = 20
-Cleave.swing_queue = true
-Cleave:AutoAoe(false)
-local Execute = Ability:Add({5308, 20658, 20660, 20661, 20662}, false, true)
-Execute.rage_cost = 15
 local HeroicStrike = Ability:Add({78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286}, false, true)
 HeroicStrike.rage_cost = 15
 HeroicStrike.swing_queue = true
+local MockingBlow = Ability:Add({694, 7400, 7402, 20559, 20560, 25266}, false, true)
+MockingBlow.buff_duration = 6
+MockingBlow.cooldown_duration = 120
+MockingBlow.rage_cost = 10
 local Overpower = Ability:Add({7384, 7887, 11584, 11585}, false, true)
 Overpower.buff_duration = 5 -- use 5 second imaginary debuff triggered by dodge
 Overpower.cooldown_duration = 5
 Overpower.rage_cost = 5
+Overpower.requires_react = true
 Overpower:TrackAuras()
 local Rend = Ability:Add({772, 6546, 6547, 6548, 11572, 11573, 11574}, false, true)
 Rend.rage_cost = 10
 Rend.buff_duration = 15
 Rend:TrackAuras()
-local Slam = Ability:Add({1464, 8820, 11604, 11605}, false, true)
-Slam.rage_cost = 15
-local Whirlwind = Ability:Add({1680}, false, true)
-Whirlwind.rage_cost = 25
-Whirlwind.cooldown_duration = 10
-Whirlwind:AutoAoe(false)
 local Hamstring = Ability:Add({1715, 7372, 7373}, false, false)
 Hamstring.rage_cost = 10
 Hamstring.buff_duration = 15
-local Recklessness = Ability:Add({1719}, true, true)
-Recklessness.buff_duration = 15
-Recklessness.cooldown_duration = 1800
 local Retaliation = Ability:Add({20230}, true, true)
 Retaliation.buff_duration = 15
 Retaliation.cooldown_duration = 1800
@@ -843,6 +843,10 @@ ThunderClap.cooldown_duration = 4
 ThunderClap.rage_cost = 20
 ThunderClap:AutoAoe(false)
 ------ Talents
+local DeathWish = Ability:Add({12292}, true, true)
+DeathWish.buff_duration = 30
+DeathWish.cooldown_duration = 180
+DeathWish.rage_cost = 10
 local DeepWounds = Ability:Add({12834}, false, true)
 DeepWounds.buff_duration = 12
 local MortalStrike = Ability:Add({12294, 21551, 21552, 21553}, false, true)
@@ -856,12 +860,49 @@ BattleShout.buff_duration = 120
 BattleShout.rage_cost = 10
 local BerserkerStance = Ability:Add({2458}, false, true)
 BerserkerStance.cooldown_duration = 1
-local Intercept = Ability:Add({20252, 20616, 20617}, false, true)
+local Cleave = Ability:Add({845, 7369, 11608, 11609, 20569}, false, true)
+Cleave.rage_cost = 20
+Cleave.swing_queue = true
+Cleave:AutoAoe(false)
+local Execute = Ability:Add({5308, 20658, 20660, 20661, 20662}, false, true)
+Execute.rage_cost = 15
+local Intercept = Ability:Add({20252, 20616, 20617, 25272, 25275}, false, true)
 Intercept.cooldown_duration = 30
+Intercept.rage_cost = 10
+Intercept.stun = Ability:Add({20253, 20614, 20615, 25273, 25274})
+Intercept.stun.buff_duration = 3
+local IntimidatingShout = Ability:Add({5246}, false, false)
+IntimidatingShout.buff_duration = 8
+IntimidatingShout.cooldown_duration = 180
+IntimidatingShout.rage_cost = 25
+local Recklessness = Ability:Add({1719}, true, true)
+Recklessness.buff_duration = 15
+Recklessness.cooldown_duration = 1800
+local Slam = Ability:Add({1464, 8820, 11604, 11605}, false, true)
+Slam.rage_cost = 15
+local VictoryRush = Ability:Add({34428}, false, true)
+VictoryRush.buff_duration = 20
+VictoryRush.last_kill_time = 0
+VictoryRush.requires_react = true
+local Whirlwind = Ability:Add({1680}, false, true)
+Whirlwind.cooldown_duration = 10
+Whirlwind.rage_cost = 25
+Whirlwind:AutoAoe(false)
 ------ Talents
-local SweepingStrikes = Ability:Add({12292}, true, true)
+local Bloodthirst = Ability:Add({23881, 23892, 23893, 23894, 25251, 30335}, false, true)
+Bloodthirst.rage_cost = 30
+Bloodthirst.cooldown_duration = 6
+local ImprovedSlam = Ability:Add({12862, 12330}, false, true)
+local Rampage = Ability:Add({29801, 30030, 30033}, true, true)
+Rampage.buff_duration = 5
+Rampage.rage_cost = 20
+Rampage.last_crit_time = 0
+Rampage.requires_react = true
+Rampage.buff = Ability:Add({30029, 30031, 30032}, true, true)
+Rampage.buff.buff_duration = 30
+local SweepingStrikes = Ability:Add({12328}, true, true)
 SweepingStrikes.rage_cost = 30
-SweepingStrikes.buff_duration = 20
+SweepingStrikes.buff_duration = 10
 SweepingStrikes.cooldown_duration = 30
 ------ Procs
 
@@ -872,32 +913,36 @@ local Disarm = Ability:Add({676}, false, false)
 Disarm.buff_duration = 10
 Disarm.cooldown_duration = 60
 Disarm.rage_cost = 20
-local IntimidatingShout = Ability:Add({5246}, false, false)
-IntimidatingShout.buff_duration = 8
-IntimidatingShout.cooldown_duration = 180
-IntimidatingShout.rage_cost = 25
-local MockingBlow = Ability:Add({694, 7400, 7402, 20559, 20560}, false, true)
-MockingBlow.buff_duration = 6
-MockingBlow.cooldown_duration = 120
-MockingBlow.rage_cost = 10
-local Revenge = Ability:Add({6572, 6574, 7379, 11600, 11601, 25288}, true, true)
+local Revenge = Ability:Add({6572, 6574, 7379, 11600, 11601, 25288, 25269, 30357}, true, true)
 Revenge.buff_duration = 5 -- use 5 second imaginary buff triggered by block/dodge/parry
 Revenge.cooldown_duration = 5
 Revenge.rage_cost = 5
+Revenge.requires_react = true
 Revenge:TrackAuras()
-local ShieldBash = Ability:Add({72, 1671, 1672}, false, true)
+local ShieldBash = Ability:Add({72, 1671, 1672, 29704}, false, true)
 ShieldBash.cooldown_duration = 12
 ShieldBash.rage_cost = 10
+ShieldBash.requires_shield = true
 local ShieldBlock = Ability:Add({2565}, true, true)
 ShieldBlock.cooldown_duration = 5
 ShieldBlock.rage_cost = 10
+ShieldBlock.requires_shield = true
 local Taunt = Ability:Add({355}, false, true)
 Taunt.cooldown_duration = 10
 Taunt.triggers_gcd = false
 ------ Talents
-local ShieldSlam = Ability:Add({23922, 23923, 23924, 23925}, false, true)
+local ConcussionBlow = Ability:Add({12809}, false, false)
+ConcussionBlow.buff_duration = 5
+ConcussionBlow.cooldown_duration = 45
+ConcussionBlow.rage_cost = 15
+local Devastate = Ability:Add({20243, 30016, 30022}, false, true)
+Devastate.rage_cost = 15
+local ShieldSlam = Ability:Add({23922, 23923, 23924, 23925, 25258, 30356}, false, true)
 ShieldSlam.rage_cost = 20
 ShieldSlam.cooldown_duration = 6
+ShieldSlam.requires_shield = true
+local FocusedRage = Ability:Add({29787, 29790, 29792}, false, true)
+local ImprovedSunderArmor = Ability:Add({12308, 12810, 12811}, false, true)
 ------ Procs
 
 -- Racials
@@ -999,11 +1044,8 @@ end
 
 function Player:NextSwing()
 	if self.ability_casting then
-		if self.ability_casting == Slam then
-			return self.cast_end, 0
-		end
 		local mh, oh = UnitAttackSpeed('player')
-		return self.cast_end + mh, self.cast_end + oh
+		return mh and (Player.time + self.execute_remains + mh) or 0, oh and (Player.time + self.execute_remains + oh) or 0
 	end
 	return self.next_swing_mh, self.next_swing_oh
 end
@@ -1054,6 +1096,14 @@ function Player:UpdateAbilities()
 			end
 		end
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
+	end
+
+	Intercept.stun.known = Intercept.known
+	Slam.use = ImprovedSlam.known and Player.equipped_mh and not (Player.equipped_oh or Player.equipped_shield)
+	if Rampage.known then
+		Rampage.buff.known = true
+		Rampage.buff.spellId = Rampage.buff.spellIds[Rampage.rank]
+		Rampage.buff.rank = Rampage.rank
 	end
 
 	abilities.bySpellId = {}
@@ -1236,7 +1286,47 @@ end
 
 -- Start Ability Modifications
 
-function Execute:Cost()
+FocusedRage.modifies = {
+	[Cleave] = true,
+	[ConcussionBlow] = true,
+	[DemoralizingShout] = true,
+	[Devastate] = true,
+	[Disarm] = true,
+	[Execute] = true,
+	[Hamstring] = true,
+	[HeroicStrike] = true,
+	[Intercept] = true,
+	[IntimidatingShout] = true,
+	[MockingBlow] = true,
+	[Overpower] = true,
+	[Pummel] = true,
+	[Rend] = true,
+	[Revenge] = true,
+	[ShieldBash] = true,
+	[ShieldSlam] = true,
+	[Slam] = true,
+	[SunderArmor] = true,
+	[ThunderClap] = true,
+	[Whirlwind] = true,
+}
+
+ImprovedSunderArmor.modifies = {
+	[Devastate] = true,
+	[SunderArmor] = true,
+}
+
+function Ability:RageCost()
+	local cost = self.rage_cost
+	if FocusedRage.known and FocusedRage.modifies[self] then
+		cost = cost - FocusedRage.rank
+	end
+	if ImprovedSunderArmor.known and ImprovedSunderArmor.modifies[self] then
+		cost = cost - ImprovedSunderArmor.rank
+	end
+	return max(0, cost)
+end
+
+function Execute:RageCost()
 	return max(Player.rage.current, self.rage_cost)
 end
 
@@ -1261,25 +1351,11 @@ function Overpower:Remains()
 	return 0
 end
 
-function Overpower:Usable()
-	if self:Down() then
-		return false
-	end
-	return Ability.Usable(self)
-end
-
 function Revenge:Remains()
 	if self.aura_targets[Player.guid] then
 		return max(0, self.aura_targets[Player.guid].expires - Player.time - Player.execute_remains)
 	end
 	return 0
-end
-
-function Revenge:Usable()
-	if self:Down() then
-		return false
-	end
-	return Ability.Usable(self)
 end
 
 function Rend:Usable()
@@ -1289,11 +1365,12 @@ function Rend:Usable()
 	return Ability.Usable(self)
 end
 
-function ShieldBash:Usable()
-	if not Player.equipped_shield then
-		return false
-	end
-	return Ability.Usable(self)
+function Rampage:Remains()
+	return max(0, self.buff_duration - (Player.time - self.last_crit_time) - Player.execute_remains)
+end
+
+function VictoryRush:Remains()
+	return max(0, self.buff_duration - (Player.time - self.last_kill_time) - Player.execute_remains)
 end
 
 -- End Ability Modifications
@@ -1333,13 +1410,11 @@ local APL = {
 
 APL[STANCE.BATTLE].main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Charge:Usable() then
-			UseCooldown(Charge)
-		elseif Bloodrage:Usable() then
-			UseCooldown(Bloodrage)
-		end
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
+		if Charge:Usable() then
+			return Charge
+		end
 	else
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
@@ -1350,14 +1425,17 @@ APL[STANCE.BATTLE].main = function(self)
 	if DemoralizingShout:Usable() and Player:UnderAttack() and DemoralizingShout:Down() then
 		UseCooldown(DemoralizingShout)
 	end
-	if ShieldSlam:Usable() then
-		return ShieldSlam
-	end
-	if ShieldSlam.known then
+	if DefensiveStance.known and Player.equipped_shield then
 		UseExtra(DefensiveStance)
 	end
-	if SweepingStrikes:Up() and Player.rage.current <= 30 then
-		UseExtra(BerserkerStance)
+	if BerserkerStance.known and not Player.equipped_shield and Player.rage.current <= 30 then
+		return BerserkerStance
+	end
+	if Slam.use and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.last_swing_mh < 1 then
+		return Slam
+	end
+	if ShieldSlam:Usable() then
+		return ShieldSlam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 then
 		UseCooldown(Bloodrage)
@@ -1365,52 +1443,44 @@ APL[STANCE.BATTLE].main = function(self)
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Player.enemies > 1 then
-		if SweepingStrikes:Usable() then
-			UseCooldown(SweepingStrikes)
+	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+		return Rampage
+	end
+	if SweepingStrikes:Usable() and Player.enemies > 1 then
+		UseCooldown(SweepingStrikes)
+	end
+	if Player.rage.current >= 60 then
+		if Cleave:Usable() and Player.enemies > 1 then
+			UseCooldown(Cleave)
 		end
-		if Cleave:Usable() then
-			if SweepingStrikes.known and SweepingStrikes:Up() and Player.rage.current >= 25 then
-				UseCooldown(Cleave)
-			end
-			if Player.rage.current >= 35 and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
-				UseCooldown(Cleave)
-			end
+		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
+			UseCooldown(HeroicStrike)
 		end
-	else
-		if Execute:Usable() then
-			return Execute
-		end
-		if (not Execute.known or Target.healthPercentage > 20) then
-			if HeroicStrike:Usable() and Player.rage.current >= 60 then
-				UseCooldown(HeroicStrike)
-			end
-			if MortalStrike:Usable() then
-				return MortalStrike
-			end
-			if Rend:Usable() and Rend:Down() and Player.rage.current >= 40 then
-				return Rend
-			end
-		end
+	end
+	if Player.equipped_oh and Execute:Usable() then
+		return Execute
+	end
+	if VictoryRush:Usable() then
+		return VictoryRush
 	end
 end
 
 APL[STANCE.DEFENSIVE].main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Charge:Ready(2) then
+		local apl = APL:Buffs(Target.boss and 180 or 30)
+		if apl then return apl end
+		if Charge:Ready(2) and Player.rage.current < 30 then
 			UseExtra(BattleStance)
 		end
 		if Bloodrage:Usable() then
 			UseCooldown(Bloodrage)
 		end
-		local apl = APL:Buffs(Target.boss and 180 or 30)
-		if apl then return apl end
 	else
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
 	if DemoralizingShout:Usable() and Player:UnderAttack() and DemoralizingShout:Down() then
-		UseCooldown(DemoralizingShout)
+		UseExtra(DemoralizingShout)
 	end
 	if ShieldSlam:Usable() then
 		return ShieldSlam
@@ -1421,22 +1491,22 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if Bloodrage:Usable() and Player.rage.current < 40 then
 		UseCooldown(Bloodrage)
 	end
+	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+		return Rampage
+	end
+	if Player.rage.current >= 60 then
+		if Cleave:Usable() and Player.enemies > 1 then
+			UseCooldown(Cleave)
+		end
+		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
+			UseCooldown(HeroicStrike)
+		end
+	end
 	if Player.enemies > 1 then
 		if SweepingStrikes.known and SweepingStrikes:Ready(2) and Player.rage.current <= 30 then
 			UseExtra(BattleStance)
 		end
-		if Cleave:Usable() then
-			if SweepingStrikes.known and SweepingStrikes:Up() and Player.rage.current >= 25 then
-				UseCooldown(Cleave)
-			end
-			if Player.rage.current >= 35 and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
-				UseCooldown(Cleave)
-			end
-		end
 	else
-		if HeroicStrike:Usable() and Player.rage.current >= 60 then
-			UseCooldown(HeroicStrike)
-		end
 		if MortalStrike:Usable() and Player.rage.current >= 40 then
 			return MortalStrike
 		end
@@ -1445,70 +1515,87 @@ end
 
 APL[STANCE.BERSERKER].main = function(self)
 	if Player:TimeInCombat() == 0 then
-		if Charge:Ready(2) then
-			UseExtra(BattleStance)
-		end
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
+		if Intercept:Usable() then
+			return Intercept
+		end
+		if Charge:Ready(2) and Player.rage.current < 30 then
+			UseExtra(BattleStance)
+		end
 	else
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
+	if Slam.use and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.last_swing_mh < 1 then
+		return Slam
+	end
 	if Bloodrage:Usable() and Player.rage.current < 40 then
 		UseCooldown(Bloodrage)
 	end
-	if BerserkerRage:Usable() and Player:HealthPct() < 90 then
-		UseCooldown(BerserkerRage)
+	if DeathWish:Usable() then
+		UseCooldown(DeathWish)
 	end
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
+	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+		return Rampage
+	end
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
+	if SweepingStrikes:Usable() and Player.enemies > 1 then
+		UseCooldown(SweepingStrikes)
+	end
+	if Player.rage.current >= 60 then
+		if Cleave:Usable() and Player.enemies > 1 then
+			UseCooldown(Cleave)
+		end
+		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
+			UseCooldown(HeroicStrike)
+		end
+	end
+	if Bloodthirst:Usable() and Player.enemies == 1 then
+		return Bloodthirst
+	end
+	if MortalStrike:Usable() and Player.enemies == 1 then
+		return MortalStrike
+	end
+	if Whirlwind:Usable() and (Player.enemies == 1 or Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+		return Whirlwind
+	end
 	if Player.enemies > 1 then
-		if SweepingStrikes:Usable() then
-			UseCooldown(SweepingStrikes)
+		if Bloodthirst:Usable() then
+			return Bloodthirst
 		end
-		if Player.enemies >= 3 and Whirlwind.known then
-			if Whirlwind:Usable() and Player.rage.current >= 35 then
-				return Whirlwind
-			end
-			if Cleave:Usable() and (Player.rage.current >= 50 or not Whirlwind:Ready(4)) then
-				if SweepingStrikes.known and SweepingStrikes:Up() and Player.rage.current >= 25 then
-					UseCooldown(Cleave)
-				end
-				if Player.rage.current >= 35 and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
-					UseCooldown(Cleave)
-				end
-			end
-		else
-			if Cleave:Usable() then
-				if SweepingStrikes.known and SweepingStrikes:Up() and Player.rage.current >= 25 then
-					UseCooldown(Cleave)
-				end
-				if Player.rage.current >= 35 and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
-					UseCooldown(Cleave)
-				end
-			end
+		if MortalStrike:Usable() then
+			return MortalStrike
 		end
-	else
-		if Execute:Usable() then
+		if Player.equipped_oh and Execute:Usable() and Player.rage.current >= 80 and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not Bloodthirst.known or not Bloodthirst:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
 			return Execute
 		end
-		if (not Execute.known or Target.healthPercentage > 20) then
-			if HeroicStrike:Usable() and Player.rage.current >= 60 then
-				UseCooldown(HeroicStrike)
-			end
-			if MortalStrike:Usable() then
-				return MortalStrike
-			end
+	else
+		if Player.equipped_oh and Execute:Usable() then
+			return Execute
 		end
+		if MortalStrike:Usable() then
+			return MortalStrike
+		end
+	end
+	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() then
+		UseCooldown(BerserkerRage)
+	end
+	if DemoralizingShout:Usable() and DemoralizingShout:Remains() < 5 and (Player.rage.current >= 60 or ((not Whirlwind.known or not Whirlwind:Ready(Player.gcd)) and (not Bloodthirst.known or not Bloodthirst:Ready(Player.gcd)) and (not MortalStrike.known or not MortalStrike:Ready(Player.gcd)))) then
+		UseExtra(DemoralizingShout)
+	end
+	if VictoryRush:Usable() then
+		return VictoryRush
 	end
 end
 
 APL.Buffs = function(self, remains)
-	if BattleShout:Usable() and BattleShout:Remains() < remains then
+	if BattleShout:Usable() and BattleShout:Remains() < min(30, remains) then
 		return BattleShout
 	end
 end
@@ -1849,13 +1936,18 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	if Opt.auto_aoe then
 		autoAoe:Remove(dstGUID)
 	end
+	if event == 'PARTY_KILL' and srcGUID == Player.guid then
+		VictoryRush.last_kill_time = Player.time
+	end
 end
 
 CombatEvent.PLAYER_SWING = function(missed, offHand)
 	local mh, oh = UnitAttackSpeed('player')
 	if offHand and oh then
+		Player.last_swing_oh = Player.time
 		Player.next_swing_oh = Player.time + oh
 	else
+		Player.last_swing_mh = Player.time
 		Player.next_swing_mh = Player.time + mh
 	end
 	if Opt.swing_timer then
@@ -1872,6 +1964,9 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 		CombatEvent.PLAYER_SWING(false, offHand)
 		if Opt.auto_aoe then
 			autoAoe:Add(dstGUID, true)
+		end
+		if Rampage.known and critical then
+			Rampage.last_crit_time = Player.time
 		end
 	elseif dstGUID == Player.guid then
 		Player.last_swing_taken = Player.time
@@ -1917,7 +2012,7 @@ CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, 
 	end
 end
 
-CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellSchool, missType)
+CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellSchool, missType, _, _, resisted, blocked, absorbed, critical)
 	if event == 'SPELL_MISSED' then
 		if srcGUID == Player.guid then
 			if Overpower.known and missType == 'DODGE' then
@@ -1948,6 +2043,9 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 			smashPreviousPanel.icon:SetTexture(ability.icon)
 			smashPreviousPanel:Show()
+		end
+		if ability == VictoryRush then
+			VictoryRush.last_kill_time = 0
 		end
 		return
 	end
@@ -1980,6 +2078,9 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			if ability == Slam then
 				CombatEvent.PLAYER_SWING(false, true) -- reset offHand timer too
 			end
+		end
+		if Rampage.known and event == 'SPELL_DAMAGE' and critical then
+			Rampage.last_crit_time = Player.time
 		end
 	end
 end

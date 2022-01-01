@@ -849,6 +849,8 @@ DeathWish.cooldown_duration = 180
 DeathWish.rage_cost = 10
 local DeepWounds = Ability:Add({12834}, false, true)
 DeepWounds.buff_duration = 12
+local ImprovedHeroicStrike = Ability:Add({12282, 12663, 12664}, false, true)
+local ImprovedThunderClap = Ability:Add({12287, 12665, 12666}, false, true)
 local MortalStrike = Ability:Add({12294, 21551, 21552, 21553}, false, true)
 MortalStrike.rage_cost = 30
 MortalStrike.cooldown_duration = 6
@@ -892,6 +894,7 @@ Whirlwind:AutoAoe(false)
 local Bloodthirst = Ability:Add({23881, 23892, 23893, 23894, 25251, 30335}, false, true)
 Bloodthirst.rage_cost = 30
 Bloodthirst.cooldown_duration = 6
+local ImprovedExecute = Ability:Add({20502, 20503}, false, true)
 local ImprovedSlam = Ability:Add({12862, 12330}, false, true)
 local Rampage = Ability:Add({29801, 30030, 30033}, true, true)
 Rampage.buff_duration = 5
@@ -1220,7 +1223,7 @@ function Target:Update()
 		self.boss = false
 		self.stunnable = true
 		self.classification = 'normal'
-		self.type = 'Humanoid'
+		self.creature_type = 'Humanoid'
 		self.player = false
 		self.level = Player.level
 		self.hostile = true
@@ -1248,7 +1251,7 @@ function Target:Update()
 	self.boss = false
 	self.stunnable = true
 	self.classification = UnitClassification('target')
-	self.type = UnitCreatureType('target')
+	self.creature_type = UnitCreatureType('target')
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
@@ -1310,24 +1313,45 @@ FocusedRage.modifies = {
 	[Whirlwind] = true,
 }
 
-ImprovedSunderArmor.modifies = {
-	[Devastate] = true,
-	[SunderArmor] = true,
-}
-
 function Ability:RageCost()
 	local cost = self.rage_cost
 	if FocusedRage.known and FocusedRage.modifies[self] then
 		cost = cost - FocusedRage.rank
 	end
-	if ImprovedSunderArmor.known and ImprovedSunderArmor.modifies[self] then
+	return max(0, cost)
+end
+
+function HeroicStrike:RageCost()
+	local cost = Ability.RageCost(self)
+	if ImprovedHeroicStrike.known then
+		cost = cost - ImprovedHeroicStrike.rank
+	end
+	return max(0, cost)
+end
+
+function SunderArmor:RageCost()
+	local cost = Ability.RageCost(self)
+	if ImprovedSunderArmor.known then
 		cost = cost - ImprovedSunderArmor.rank
+	end
+	return max(0, cost)
+end
+Devastate.RageCost = SunderArmor.RageCost
+
+function ThunderClap:RageCost()
+	local cost = Ability.RageCost(self)
+	if ImprovedThunderClap.known then
+		cost = cost - floor(1.4 * ImprovedThunderClap.rank)
 	end
 	return max(0, cost)
 end
 
 function Execute:RageCost()
-	return max(Player.rage.current, self.rage_cost)
+	local cost = Ability.RageCost(self)
+	if ImprovedExecute.known then
+		cost = cost - floor(2.6 * ImprovedExecute.rank)
+	end
+	return max(0, cost)
 end
 
 function Execute:Usable()
@@ -1482,33 +1506,54 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if DemoralizingShout:Usable() and Player:UnderAttack() and DemoralizingShout:Down() then
 		UseExtra(DemoralizingShout)
 	end
-	if ShieldSlam:Usable() then
-		return ShieldSlam
+	if ShieldBlock:Usable() and Player.rage.current >= 27 and Player:UnderMeleeAttack() then
+		UseCooldown(ShieldBlock)
 	end
-	if Revenge:Usable() then
-		return Revenge
+	if Taunt:Usable() and Player.threat < 3 and UnitAffectingCombat('target') then
+		UseCooldown(Taunt)
 	end
-	if Bloodrage:Usable() and Player.rage.current < 40 then
+	if Bloodrage:Usable() and Player.rage.current < 20 then
 		UseCooldown(Bloodrage)
+	end
+	if Player.rage.current >= 44 then
+		if Cleave:Usable() and Player.enemies > 1 then
+			UseCooldown(Cleave)
+		end
+		if HeroicStrike:Usable() then
+			UseCooldown(HeroicStrike)
+		end
+	end
+	if SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(2) and Player.rage.current <= 30 then
+		UseExtra(BattleStance)
 	end
 	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
 		return Rampage
 	end
-	if Player.rage.current >= 60 then
-		if Cleave:Usable() and Player.enemies > 1 then
-			UseCooldown(Cleave)
-		end
-		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
-			UseCooldown(HeroicStrike)
-		end
+	if ShieldSlam:Usable(0.5, true) then
+		return ShieldSlam
 	end
-	if Player.enemies > 1 then
-		if SweepingStrikes.known and SweepingStrikes:Ready(2) and Player.rage.current <= 30 then
-			UseExtra(BattleStance)
+	if ThunderClap:Usable(0.5, true) and Player.enemies >= 3 then
+		return ThunderClap
+	end
+	if Revenge:Usable(0, true) then
+		return Revenge
+	end
+	if ThunderClap:Usable(0, true) and (Player.enemies >= 2 or ThunderClap:Down()) then
+		return ThunderClap
+	end
+	if Bloodthirst:Usable() then
+		return Bloodthirst
+	end
+	if MortalStrike:Usable() then
+		return MortalStrike
+	end
+	if Devastate.known then
+		if Devastate:Usable() and Player.rage.current >= 26 then
+			return Devastate
 		end
 	else
-		if MortalStrike:Usable() and Player.rage.current >= 40 then
-			return MortalStrike
+		if SunderArmor:Usable() and (Player.rage.current >= 60 or (Player.rage.current >= 26 and SunderArmor:Stack() < 5)) then
+			return SunderArmor
 		end
 	end
 end
@@ -1601,6 +1646,12 @@ APL.Buffs = function(self, remains)
 end
 
 APL.Interrupt = function(self)
+	if Pummel:Usable() and Player.stance == STANCE.BERSERKER then
+		return Pummel
+	end
+	if ShieldBash:Usable() and (Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE) then
+		return ShieldBash
+	end
 	if Pummel:Usable() then
 		return Pummel
 	end

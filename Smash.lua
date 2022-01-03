@@ -953,12 +953,12 @@ local BloodFury = Ability:Add({20572}, true, true)
 BloodFury.buff_duration = 15
 BloodFury.cooldown_duration = 180
 -- Class Debuffs
-local CurseOfRecklessness = Ability:Add({704, 7658, 7659, 11717, 27226}) -- Applied by Warlocks
-local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203}) -- Applied by Warriors, doesn't stack with Demoralizing Roar
+local CurseOfWeakness = Ability:Add({702, 1108, 6205, 7646, 11707, 11708, 27224, 30909}) -- Applied by Warlocks, AP reduction
+local DemoralizingRoar = Ability:Add({99, 1735, 9490, 9747, 9898, 26998}) -- Applied by Druids, AP reduction
+local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203}) -- Applied by Warriors, AP reduction, doesn't stack with Demoralizing Roar/Curse of Weakness
 DemoralizingShout.rage_cost = 10
-local ExposeArmor = Ability:Add({8647, 8649, 8650, 11197, 11198, 26866}) -- Applied by Rogues, doesn't stack with Sunder Armor
-local PierceArmor = Ability:Add({38187}) -- Applied by Murloc MC on Tidewalker
-local SunderArmor = Ability:Add({7386, 7405, 8380, 11596, 11597, 25225}) -- Applied by Warriors, doesn't stack with Expose Armor
+local ExposeArmor = Ability:Add({8647, 8649, 8650, 11197, 11198, 26866}) -- Applied by Rogues, armor reduction
+local SunderArmor = Ability:Add({7386, 7405, 8380, 11596, 11597, 25225}) -- Applied by Warriors, armor reduction, doesn't stack with Expose Armor
 SunderArmor.buff_duration = 30
 SunderArmor.rage_cost = 15
 -- Trinket Effects
@@ -1446,9 +1446,6 @@ APL[STANCE.BATTLE].main = function(self)
 	if Overpower:Usable() then
 		return Overpower
 	end
-	if DemoralizingShout:Usable() and Player:UnderAttack() and DemoralizingShout:Down() then
-		UseCooldown(DemoralizingShout)
-	end
 	if DefensiveStance.known and Player.equipped_shield then
 		UseExtra(DefensiveStance)
 	end
@@ -1461,7 +1458,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if Bloodrage:Usable() and Player.rage.current < 40 then
+	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
@@ -1503,16 +1500,13 @@ APL[STANCE.DEFENSIVE].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if DemoralizingShout:Usable() and Player:UnderAttack() and DemoralizingShout:Down() then
-		UseExtra(DemoralizingShout)
-	end
 	if ShieldBlock:Usable() and Player.rage.current >= 27 and Player:UnderMeleeAttack() then
 		UseCooldown(ShieldBlock)
 	end
 	if Taunt:Usable() and Player.threat < 3 and UnitAffectingCombat('target') then
 		UseCooldown(Taunt)
 	end
-	if Bloodrage:Usable() and Player.rage.current < 20 then
+	if Bloodrage:Usable() and Player.rage.current < 20 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
 	if Player.rage.current >= 44 then
@@ -1529,17 +1523,23 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
 		return Rampage
 	end
-	if ShieldSlam:Usable(0.5, true) then
+	if Revenge:Usable() and Revenge:Remains() < Player.gcd then
+		return Revenge
+	end
+	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if ThunderClap:Usable(0.5, true) and Player.enemies >= 3 then
+	if ThunderClap:Usable() and Player.enemies >= 3 then
 		return ThunderClap
 	end
 	if Revenge:Usable(0, true) then
-		return Revenge
+		return Pool(Revenge)
 	end
-	if ThunderClap:Usable(0, true) and (Player.enemies >= 2 or ThunderClap:Down()) then
-		return ThunderClap
+	if ShieldSlam:Usable(0.5, true) then
+		return Pool(ShieldSlam)
+	end
+	if ThunderClap:Usable(0.5, true) and (Player.enemies >= 2 or ThunderClap:Down()) then
+		return Pool(ThunderClap)
 	end
 	if Bloodthirst:Usable() then
 		return Bloodthirst
@@ -1575,7 +1575,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if Slam.use and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.last_swing_mh < 1 then
 		return Slam
 	end
-	if Bloodrage:Usable() and Player.rage.current < 40 then
+	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
 	if DeathWish:Usable() then
@@ -1631,17 +1631,39 @@ APL[STANCE.BERSERKER].main = function(self)
 	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() then
 		UseCooldown(BerserkerRage)
 	end
-	if DemoralizingShout:Usable() and DemoralizingShout:Remains() < 5 and (Player.rage.current >= 60 or ((not Whirlwind.known or not Whirlwind:Ready(Player.gcd)) and (not Bloodthirst.known or not Bloodthirst:Ready(Player.gcd)) and (not MortalStrike.known or not MortalStrike:Ready(Player.gcd)))) then
-		UseExtra(DemoralizingShout)
-	end
 	if VictoryRush:Usable() then
 		return VictoryRush
 	end
 end
 
 APL.Buffs = function(self, remains)
-	if BattleShout:Usable() and BattleShout:Remains() < min(30, remains) then
-		return BattleShout
+	if BattleShout.known then
+		self.bs_mine = BattleShout:Remains(true)
+		self.bs_remains = self.bs_mine > 0 and self.bs_mine or BattleShout:Remains()
+		self.bs_mine = self.bs_mine > 0
+		if BattleShout:Usable() and (self.bs_remains == 0 or (self.bs_mine and self.bs_remains < min(30, remains))) then
+			return BattleShout
+		end
+	end
+	if CommandingShout.known and not self.bs_mine then
+		self.cs_mine = CommandingShout:Remains(true)
+		self.cs_remains = self.cs_mine > 0 and self.cs_mine or CommandingShout:Remains()
+		self.cs_mine = self.cs_mine > 0
+		if CommandingShout:Usable() and (self.cs_remains == 0 or (self.cs_mine and self.cs_remains < min(30, remains))) then
+			return CommandingShout
+		end
+	end
+	if DemoralizingShout.known and Player:TimeInCombat() > 0 then
+		self.ds_mine = DemoralizingShout:Remains(true)
+		self.ds_remains = self.ds_mine > 0 and self.ds_mine or max(DemoralizingShout:Remains(), DemoralizingRoar:Remains(), CurseOfWeakness:Remains())
+		self.ds_mine = self.ds_mine > 0
+		if DemoralizingShout:Usable() and (self.ds_remains == 0 or (self.ds_mine and self.ds_remains < 5)) then
+			if Player.stance ~= STANCE.BERSERKER then
+				return DemoralizingShout
+			elseif Player.rage.current >= 60 or ((not Whirlwind.known or not Whirlwind:Ready(Player.gcd)) and (not Bloodthirst.known or not Bloodthirst:Ready(Player.gcd)) and (not MortalStrike.known or not MortalStrike:Ready(Player.gcd))) then
+				return DemoralizingShout
+			end
+		end
 	end
 end
 

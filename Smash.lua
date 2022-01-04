@@ -2027,7 +2027,10 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 		autoAoe:Remove(dstGUID)
 	end
 	if event == 'PARTY_KILL' and srcGUID == Player.guid then
-		VictoryRush.last_kill_time = Player.time
+		local unitType = dstGUID:match('^(%w+)-')
+		if unitType == 'Creature' or unitType == 'Player' then
+			VictoryRush.last_kill_time = Player.time
+		end
 	end
 end
 

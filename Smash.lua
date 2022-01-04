@@ -815,6 +815,8 @@ local BattleStance = Ability:Add({2457}, false, true)
 BattleStance.cooldown_duration = 1
 local Charge = Ability:Add({100, 6178, 11578}, false, true)
 Charge.cooldown_duration = 15
+Charge.stun = Ability:Add({7922})
+Charge.stun.buff_duration = 1
 local HeroicStrike = Ability:Add({78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286}, false, true)
 HeroicStrike.rage_cost = 15
 HeroicStrike.swing_queue = true
@@ -866,6 +868,9 @@ local Cleave = Ability:Add({845, 7369, 11608, 11609, 20569}, false, true)
 Cleave.rage_cost = 20
 Cleave.swing_queue = true
 Cleave:AutoAoe(false)
+local CommandingShout = Ability:Add({469}, true, false)
+CommandingShout.buff_duration = 120
+CommandingShout.rage_cost = 10
 local Execute = Ability:Add({5308, 20658, 20660, 20661, 20662}, false, true)
 Execute.rage_cost = 15
 local Intercept = Ability:Add({20252, 20616, 20617, 25272, 25275}, false, true)
@@ -922,6 +927,8 @@ Revenge.cooldown_duration = 5
 Revenge.rage_cost = 5
 Revenge.requires_react = true
 Revenge:TrackAuras()
+Revenge.stun = Ability:Add({12798})
+Revenge.stun.buff_duration = 3
 local ShieldBash = Ability:Add({72, 1671, 1672, 29704}, false, true)
 ShieldBash.cooldown_duration = 12
 ShieldBash.rage_cost = 10
@@ -1272,7 +1279,7 @@ function Target:Update()
 end
 
 function Target:Stunned()
-	if Charge:Up() then
+	if Charge.stun:Up() or Intercept.stun:Up() or Revenge.stun:Up() or ConcussionBlow:Up() then
 		return true
 	end
 	return false
@@ -1395,6 +1402,13 @@ end
 
 function VictoryRush:Remains()
 	return max(0, self.buff_duration - (Player.time - self.last_kill_time) - Player.execute_remains)
+end
+
+function ConcussionBlow:Usable()
+	if not Target.stunnable or Target:Stunned() then
+		return false
+	end
+	return Ability.Usable(self)
 end
 
 -- End Ability Modifications
@@ -1641,17 +1655,17 @@ APL.Buffs = function(self, remains)
 		self.bs_mine = BattleShout:Remains(true)
 		self.bs_remains = self.bs_mine > 0 and self.bs_mine or BattleShout:Remains()
 		self.bs_mine = self.bs_mine > 0
-		if BattleShout:Usable() and (self.bs_remains == 0 or (self.bs_mine and self.bs_remains < min(30, remains))) then
-			return BattleShout
-		end
 	end
-	if CommandingShout.known and not self.bs_mine then
+	if CommandingShout.known then
 		self.cs_mine = CommandingShout:Remains(true)
 		self.cs_remains = self.cs_mine > 0 and self.cs_mine or CommandingShout:Remains()
 		self.cs_mine = self.cs_mine > 0
-		if CommandingShout:Usable() and (self.cs_remains == 0 or (self.cs_mine and self.cs_remains < min(30, remains))) then
-			return CommandingShout
-		end
+	end
+	if BattleShout:Usable() and not self.cs_mine and (self.bs_remains == 0 or (self.bs_mine and self.bs_remains < min(30, remains))) then
+		return BattleShout
+	end
+	if CommandingShout:Usable() and not self.bs_mine and (self.cs_remains == 0 or (self.cs_mine and self.cs_remains < min(30, remains))) then
+		return CommandingShout
 	end
 	if DemoralizingShout.known and Player:TimeInCombat() > 0 then
 		self.ds_mine = DemoralizingShout:Remains(true)
@@ -1679,6 +1693,9 @@ APL.Interrupt = function(self)
 	end
 	if ShieldBash:Usable() then
 		return ShieldBash
+	end
+	if ConcussionBlow:Usable() then
+		return ConcussionBlow
 	end
 end
 

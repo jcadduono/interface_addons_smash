@@ -1604,7 +1604,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if SweepingStrikes:Usable() and Player.enemies > 1 then
+	if SweepingStrikes:Usable(0.5, true) and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
 	end
 	if Player.rage.current >= 60 then
@@ -1615,31 +1615,31 @@ APL[STANCE.BERSERKER].main = function(self)
 			UseCooldown(HeroicStrike)
 		end
 	end
-	if Bloodthirst:Usable() and Player.enemies == 1 then
-		return Bloodthirst
-	end
-	if MortalStrike:Usable() and Player.enemies == 1 then
-		return MortalStrike
-	end
-	if Whirlwind:Usable() and (Player.enemies == 1 or Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
-		return Whirlwind
-	end
 	if Player.enemies > 1 then
+		if Whirlwind:Usable() and (Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+			return Whirlwind
+		end
+		if Bloodthirst:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+			return Bloodthirst
+		end
+		if MortalStrike:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+			return MortalStrike
+		end
+		if Player.equipped_oh and Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
+			return Execute
+		end
+	else
 		if Bloodthirst:Usable() then
 			return Bloodthirst
 		end
 		if MortalStrike:Usable() then
 			return MortalStrike
 		end
-		if Player.equipped_oh and Execute:Usable() and Player.rage.current >= 80 and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not Bloodthirst.known or not Bloodthirst:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
-			return Execute
+		if Whirlwind:Usable() and (not Execute.known or Target.healthPercentage > 20) then
+			return Whirlwind
 		end
-	else
-		if Player.equipped_oh and Execute:Usable() then
-			return Execute
-		end
-		if MortalStrike:Usable() then
-			return MortalStrike
+		if Player.equipped_oh and Execute:Usable(0, true) then
+			return Pool(Execute)
 		end
 	end
 	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() then

@@ -859,7 +859,7 @@ MortalStrike.cooldown_duration = 6
 ------ Procs
 
 ---- Fury
-local BattleShout = Ability:Add({6673, 5242, 6192, 11549, 11550, 11551, 25289}, true, false)
+local BattleShout = Ability:Add({6673, 5242, 6192, 11549, 11550, 11551, 25289, 2048}, true, false)
 BattleShout.buff_duration = 120
 BattleShout.rage_cost = 10
 local BerserkerStance = Ability:Add({2458}, false, true)
@@ -1192,29 +1192,38 @@ function Player:Init()
 		UI:CreateOverlayGlows()
 	end
 	smashPreviousPanel.ability = nil
-	Player.guid = UnitGUID('player')
-	Player.name = UnitName('player')
-	Player.level = UnitLevel('player')
-	_, Player.instance = IsInInstance()
-	Player:SetTargetMode(1)
+	self.guid = UnitGUID('player')
+	self.name = UnitName('player')
+	self.level = UnitLevel('player')
+	_, self.instance = IsInInstance()
+	self:SetTargetMode(1)
 	events:GROUP_ROSTER_UPDATE()
 	events:PLAYER_EQUIPMENT_CHANGED()
 	events:UPDATE_SHAPESHIFT_FORM()
 	events:PLAYER_REGEN_ENABLED()
-	Target:Update()
-	Player:Update()
+	self:Update()
 end
 
 -- End Player API
 
 -- Start Target API
 
-function Target:UpdateHealth()
+function Target:UpdateHealth(reset)
 	timer.health = 0
 	self.health = UnitHealth('target')
 	self.health_max = UnitHealthMax('target')
-	table.remove(self.health_array, 1)
-	self.health_array[25] = self.health
+	if self.health <= 0 then
+		self.health = Player.health_max
+		self.health_max = self.health
+	end
+	if reset then
+		for i = 1, 25 do
+			self.health_array[i] = self.health
+		end
+	else
+		table.remove(self.health_array, 1)
+		self.health_array[25] = self.health
+	end
 	self.timeToDieMax = self.health / Player.health_max * 10
 	self.healthPercentage = self.health_max > 0 and (self.health / self.health_max * 100) or 100
 	self.healthLostPerSec = (self.health_array[1] - self.health) / 5
@@ -1234,10 +1243,7 @@ function Target:Update()
 		self.player = false
 		self.level = Player.level
 		self.hostile = true
-		for i = 1, 25 do
-			self.health_array[i] = 0
-		end
-		self:UpdateHealth()
+		self:UpdateHealth(true)
 		if Opt.always_on then
 			UI:UpdateCombat()
 			smashPanel:Show()
@@ -1251,9 +1257,7 @@ function Target:Update()
 	if guid ~= self.guid then
 		self.guid = guid
 		self.npcid = tonumber(guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
-		for i = 1, 25 do
-			self.health_array[i] = UnitHealth('target')
-		end
+		self:UpdateHealth(true)
 	end
 	self.boss = false
 	self.stunnable = true
@@ -1262,7 +1266,6 @@ function Target:Update()
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
-	self:UpdateHealth()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
 		if self.level == -1 or (Player.instance == 'party' and self.level >= Player.level + 2) then
 			self.boss = true

@@ -890,6 +890,7 @@ Slam.rage_cost = 15
 local VictoryRush = Ability:Add({34428}, false, true)
 VictoryRush.buff_duration = 20
 VictoryRush.last_kill_time = 0
+VictoryRush.activated = false
 VictoryRush.requires_react = true
 local Whirlwind = Ability:Add({1680}, false, true)
 Whirlwind.cooldown_duration = 10
@@ -1404,6 +1405,9 @@ function Rampage:Remains()
 end
 
 function VictoryRush:Remains()
+	if not self.activated then
+		return 0
+	end
 	return max(0, self.buff_duration - (Player.time - self.last_kill_time) - Player.execute_remains)
 end
 
@@ -1495,6 +1499,9 @@ APL[STANCE.BATTLE].main = function(self)
 			UseCooldown(HeroicStrike)
 		end
 	end
+	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
+		return VictoryRush
+	end
 	if Player.equipped_oh and Execute:Usable() then
 		return Execute
 	end
@@ -1546,7 +1553,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if ThunderClap:Usable() and Player.enemies >= 3 then
+	if ThunderClap:Usable() and Player.enemies >= (ImprovedThunderClap.known and 3 or 4) then
 		return ThunderClap
 	end
 	if Revenge:Usable(0, true) then
@@ -1555,21 +1562,24 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if ShieldSlam:Usable(0.5, true) then
 		return Pool(ShieldSlam)
 	end
-	if ThunderClap:Usable(0.5, true) and (Player.enemies >= 2 or ThunderClap:Down()) then
+	if ThunderClap:Usable(0.5, true) and ((ImprovedThunderClap.known and Player.enemies >= 2) or ThunderClap:Down()) then
 		return Pool(ThunderClap)
 	end
-	if Bloodthirst:Usable() then
+	if Bloodthirst:Usable(0, true) then
 		return Bloodthirst
 	end
-	if MortalStrike:Usable() then
+	if MortalStrike:Usable(0, true) then
 		return MortalStrike
 	end
 	if Devastate.known then
-		if Devastate:Usable() and Player.rage.current >= 26 then
+		if Devastate:Usable() and (Player.rage.current >= 26 or (SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5)) then
 			return Devastate
 		end
 	else
-		if SunderArmor:Usable() and (Player.rage.current >= 60 or (Player.rage.current >= 26 and SunderArmor:Stack() < 5)) then
+		if ThunderClap:Usable() and Player.enemies >= 2 and Player.rage.current >= 50 then
+			return ThunderClap
+		end
+		if SunderArmor:Usable() and (Player.rage.current >= 60 or (SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5) or (Player.rage.current >= 26 and SunderArmor:Stack() < 5)) then
 			return SunderArmor
 		end
 	end
@@ -1582,7 +1592,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Intercept:Usable() then
 			return Intercept
 		end
-		if Charge:Ready(2) and Player.rage.current < 30 then
+		if Charge:Ready(0.5) and Player.rage.current < 20 then
 			UseExtra(BattleStance)
 		end
 	else
@@ -1617,6 +1627,9 @@ APL[STANCE.BERSERKER].main = function(self)
 		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
 			UseCooldown(HeroicStrike)
 		end
+	end
+	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
+		return VictoryRush
 	end
 	if Player.enemies > 1 then
 		if Whirlwind:Usable() and (Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
@@ -2030,10 +2043,7 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 		autoAoe:Remove(dstGUID)
 	end
 	if event == 'PARTY_KILL' and srcGUID == Player.guid then
-		local unitType = dstGUID:match('^(%w+)-')
-		if unitType == 'Creature' or unitType == 'Player' then
-			VictoryRush.last_kill_time = Player.time
-		end
+		VictoryRush.last_kill_time = Player.time
 	end
 end
 
@@ -2140,9 +2150,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			smashPreviousPanel.icon:SetTexture(ability.icon)
 			smashPreviousPanel:Show()
 		end
-		if ability == VictoryRush then
-			VictoryRush.last_kill_time = 0
-		end
 		return
 	end
 	if dstGUID == Player.guid then
@@ -2183,6 +2190,21 @@ end
 
 function events:COMBAT_LOG_EVENT_UNFILTERED()
 	CombatEvent.TRIGGER(CombatLogGetCurrentEventInfo())
+end
+
+function events:SPELL_UPDATE_USABLE()
+	if VictoryRush.known and VictoryRush.last_kill_time > 0 then
+		if IsUsableSpell(VictoryRush.spellId) then
+			if not VictoryRush.activated then
+				VictoryRush.activated = true
+			end
+		else
+			if VictoryRush.activated then
+				VictoryRush.activated = false
+				VictoryRush.last_kill_time = 0
+			end
+		end
+	end
 end
 
 function events:PLAYER_TARGET_CHANGED()

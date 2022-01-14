@@ -160,6 +160,11 @@ local Player = {
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
+	set_bonus = {
+		t4_dps = 0,
+		t5_dps = 0,
+		t6_dps = 0,
+	},
 }
 
 -- current target information
@@ -1362,6 +1367,9 @@ function Execute:RageCost()
 	if ImprovedExecute.known then
 		cost = cost - floor(2.6 * ImprovedExecute.rank)
 	end
+	if Player.set_bonus.t6_dps >= 2 then
+		cost = cost - 3
+	end
 	return max(0, cost)
 end
 
@@ -1370,6 +1378,30 @@ function Execute:Usable()
 		return false
 	end
 	return Ability.Usable(self)
+end
+
+function Bloodthirst:RageCost()
+	local cost = Ability.RageCost(self)
+	if Player.set_bonus.t5_dps >= 4 then
+		cost = cost - 5
+	end
+	return max(0, cost)
+end
+
+function MortalStrike:RageCost()
+	local cost = Ability.RageCost(self)
+	if Player.set_bonus.t5_dps >= 4 then
+		cost = cost - 5
+	end
+	return max(0, cost)
+end
+
+function Whirlwind:RageCost()
+	local cost = Ability.RageCost(self)
+	if Player.set_bonus.t4_dps >= 2 then
+		cost = cost - 5
+	end
+	return max(0, cost)
 end
 
 function Charge:Usable()
@@ -1467,7 +1499,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if Overpower:Usable() then
 		return Overpower
 	end
-	if DefensiveStance.known and Player.equipped_shield then
+	if DefensiveStance.known and Player.equipped_shield and (Player.enemies == 1 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
 		UseExtra(DefensiveStance)
 	end
 	if BerserkerStance.known and not Player.equipped_shield and Player.rage.current <= 30 then
@@ -1611,11 +1643,11 @@ APL[STANCE.BERSERKER].main = function(self)
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
-		return Rampage
+	if Recklessness:Usable() and Target.boss and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) then
+		UseExtra(Recklessness)
 	end
-	if ShieldSlam:Usable() then
-		return ShieldSlam
+	if Rampage:Usable(0, true) and Rampage.buff:Remains() < 3 then
+		return Pool(Rampage)
 	end
 	if SweepingStrikes:Usable(0.5, true) and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
@@ -1641,6 +1673,12 @@ APL[STANCE.BERSERKER].main = function(self)
 		if MortalStrike:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
 			return MortalStrike
 		end
+		if ShieldSlam:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+			return ShieldSlam
+		end
+		if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+			return Rampage
+		end
 		if Player.equipped_oh and Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
 			return Execute
 		end
@@ -1651,8 +1689,14 @@ APL[STANCE.BERSERKER].main = function(self)
 		if MortalStrike:Usable() then
 			return MortalStrike
 		end
+		if ShieldSlam:Usable() then
+			return ShieldSlam
+		end
 		if Whirlwind:Usable() and (not Execute.known or Target.healthPercentage > 20) then
 			return Whirlwind
+		end
+		if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+			return Rampage
 		end
 		if Player.equipped_oh and Execute:Usable(0, true) then
 			return Pool(Execute)
@@ -2292,6 +2336,11 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 17) or 0)
 	Player.equipped_oh = equipType == 'INVTYPE_WEAPON'
 	Player.equipped_shield = equipType == 'INVTYPE_SHIELD'
+
+	Player.set_bonus.t4_dps = (Player:Equipped(29019) and 1 or 0) + (Player:Equipped(29020) and 1 or 0) + (Player:Equipped(29021) and 1 or 0) + (Player:Equipped(29022) and 1 or 0) + (Player:Equipped(29023) and 1 or 0)
+	Player.set_bonus.t5_dps = (Player:Equipped(30118) and 1 or 0) + (Player:Equipped(30119) and 1 or 0) + (Player:Equipped(30120) and 1 or 0) + (Player:Equipped(30121) and 1 or 0) + (Player:Equipped(30122) and 1 or 0)
+	Player.set_bonus.t6_dps = (Player:Equipped(30969) and 1 or 0) + (Player:Equipped(30972) and 1 or 0) + (Player:Equipped(30975) and 1 or 0) + (Player:Equipped(30977) and 1 or 0) + (Player:Equipped(30979) and 1 or 0) + (Player:Equipped(34441) and 1 or 0) + (Player:Equipped(34546) and 1 or 0) + (Player:Equipped(34569) and 1 or 0)
+
 	Player:UpdateAbilities()
 end
 

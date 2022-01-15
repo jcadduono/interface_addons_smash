@@ -1563,7 +1563,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if ShieldBlock:Usable() and Player.rage.current >= 27 and Player:UnderMeleeAttack() then
+	if ShieldBlock:Usable() and Player.rage.current >= 27 and Player:UnderMeleeAttack(true) and ShieldBlock:Down() then
 		UseCooldown(ShieldBlock)
 	end
 	if Taunt:Usable() and Player.threat < 3 and UnitAffectingCombat('target') then

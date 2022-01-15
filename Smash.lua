@@ -145,25 +145,30 @@ local Player = {
 	group_size = 1,
 	moving = false,
 	movement_speed = 100,
-	threat = 0,
-	threat_pct = 0,
-	thread_lead = 0,
-	equipped_mh = false,
-	equipped_oh = false,
-	equipped_shield = false,
-	last_swing_mh = 0,
-	last_swing_oh = 0,
-	next_swing_mh = 0,
-	next_swing_oh = 0,
-	last_swing_taken = 0,
-	last_swing_taken_physical = 0,
-	previous_gcd = {},-- list of previous GCD abilities
-	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
+	threat = {
+		status = 0,
+		pct = 0,
+		lead = 0,
+	},
+	swing = {
+		last_mh = 0,
+		last_oh = 0,
+		next_mh = 0,
+		next_oh = 0,
+		last_taken = 0,
+		last_taken_physical = 0,
+	},
+	equipped = {
+		twohand = false,
+		shield = false,
 	},
 	set_bonus = {
 		t4_dps = 0,
 		t5_dps = 0,
 		t6_dps = 0,
+	},
+	previous_gcd = {},-- list of previous GCD abilities
+	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
 }
 
@@ -488,7 +493,7 @@ function Ability:Usable(seconds, pool)
 	if self.requires_react and self:Down() then
 		return false
 	end
-	if self.requires_shield and not Player.equipped_shield then
+	if self.requires_shield and not Player.equipped.shield then
 		return false
 	end
 	return self:Ready(seconds)
@@ -1063,15 +1068,15 @@ function Player:NextSwing()
 		local mh, oh = UnitAttackSpeed('player')
 		return mh and (Player.time + self.execute_remains + mh) or 0, oh and (Player.time + self.execute_remains + oh) or 0
 	end
-	return self.next_swing_mh, self.next_swing_oh
+	return self.swing.next_mh, self.swing.next_oh
 end
 
 function Player:UnderMeleeAttack(physical)
-	return (self.time - (physical and self.last_swing_taken_physical or self.last_swing_taken)) < 3
+	return (self.time - (physical and self.swing.last_taken_physical or self.swing.last_taken)) < 3
 end
 
 function Player:UnderAttack()
-	return self.threat >= 3 or self:UnderMeleeAttack()
+	return self.threat.status >= 3 or self:UnderMeleeAttack()
 end
 
 function Player:TimeInCombat()
@@ -1115,7 +1120,6 @@ function Player:UpdateAbilities()
 	end
 
 	Intercept.stun.known = Intercept.known
-	Slam.use = ImprovedSlam.known and Player.equipped_mh and not (Player.equipped_oh or Player.equipped_shield)
 	if Rampage.known then
 		Rampage.buff.known = true
 		Rampage.buff.spellId = Rampage.buff.spellIds[Rampage.rank]
@@ -1145,15 +1149,15 @@ function Player:UpdateAbilities()
 end
 
 function Player:UpdateThreat()
-	local _, threat, threat_pct
-	_, threat, threat_pct = UnitDetailedThreatSituation('player', 'target')
-	self.threat = threat or 0
-	self.threat_pct = threat_pct or 0
-	self.threat_lead = 0
-	if self.threat >= 3 and DETAILS_PLUGIN_TINY_THREAT then
+	local _, status, pct
+	_, status, pct = UnitDetailedThreatSituation('player', 'target')
+	self.threat.status = status or 0
+	self.threat.pct = pct or 0
+	self.threat.lead = 0
+	if self.threat.status >= 3 and DETAILS_PLUGIN_TINY_THREAT then
 		local threat_table = DETAILS_PLUGIN_TINY_THREAT.player_list_indexes
 		if threat_table and threat_table[1] and threat_table[2] and threat_table[1][1] == Player.name then
-			self.threat_lead = max(0, threat_table[1][6] - threat_table[2][6])
+			self.threat.lead = max(0, threat_table[1][6] - threat_table[2][6])
 		end
 	end
 end
@@ -1506,14 +1510,11 @@ APL[STANCE.BATTLE].main = function(self)
 	if Overpower:Usable() then
 		return Overpower
 	end
-	if DefensiveStance.known and Player.equipped_shield and (Player.enemies == 1 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
+	if DefensiveStance.known and Player.equipped.shield and (Player.enemies == 1 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
 		UseExtra(DefensiveStance)
 	end
-	if BerserkerStance.known and not Player.equipped_shield and Player.rage.current <= 30 then
+	if BerserkerStance.known and not Player.equipped.shield and Player.rage.current <= 30 then
 		return BerserkerStance
-	end
-	if Slam.use and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.last_swing_mh < 1 then
-		return Slam
 	end
 	if ShieldSlam:Usable() then
 		return ShieldSlam
@@ -1541,11 +1542,14 @@ APL[STANCE.BATTLE].main = function(self)
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if Player.equipped_oh and Execute:Usable() then
+	if not Player.equipped.twohand and Execute:Usable() then
 		return Execute
 	end
 	if VictoryRush:Usable() then
 		return VictoryRush
+	end
+	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
+		return Slam
 	end
 end
 
@@ -1566,7 +1570,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if ShieldBlock:Usable() and Player.rage.current >= 27 and Player:UnderMeleeAttack(true) and ShieldBlock:Down() then
 		UseCooldown(ShieldBlock)
 	end
-	if Taunt:Usable() and Player.threat < 3 and UnitAffectingCombat('target') then
+	if Taunt:Usable() and Player.threat.status < 3 and UnitAffectingCombat('target') then
 		UseCooldown(Taunt)
 	end
 	if Bloodrage:Usable() and Player.rage.current < 20 and Player:HealthPct() > 60 then
@@ -1610,6 +1614,9 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if MortalStrike:Usable(0, true) then
 		return MortalStrike
 	end
+	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
+		return Slam
+	end
 	if Devastate.known then
 		if Devastate:Usable() and (Player.rage.current >= 26 or (SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5)) then
 			return Devastate
@@ -1638,7 +1645,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.last_swing_mh < 1 then
+	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
@@ -1650,7 +1657,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Recklessness:Usable() and Target.boss and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) then
+	if Recklessness:Usable() and Target.boss and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) and (not DeathWish.known or DeathWish:Up()) then
 		UseExtra(Recklessness)
 	end
 	if Rampage:Usable(0, true) and Rampage.buff:Remains() < 3 then
@@ -1686,7 +1693,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Rampage:Usable() and Rampage.buff:Remains() < 6 then
 			return Rampage
 		end
-		if Player.equipped_oh and Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
+		if not Player.equipped.twohand and Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
 			return Execute
 		end
 	else
@@ -1705,9 +1712,12 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Rampage:Usable() and Rampage.buff:Remains() < 6 then
 			return Rampage
 		end
-		if Player.equipped_oh and Execute:Usable(0, true) then
+		if not Player.equipped.twohand and Execute:Usable(0, true) then
 			return Pool(Execute)
 		end
+	end
+	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
+		return Slam
 	end
 	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() then
 		UseCooldown(BerserkerRage)
@@ -2101,11 +2111,11 @@ end
 CombatEvent.PLAYER_SWING = function(missed, offHand)
 	local mh, oh = UnitAttackSpeed('player')
 	if offHand and oh then
-		Player.last_swing_oh = Player.time
-		Player.next_swing_oh = Player.time + oh
+		Player.swing.last_oh = Player.time
+		Player.swing.next_oh = Player.time + oh
 	else
-		Player.last_swing_mh = Player.time
-		Player.next_swing_mh = Player.time + mh
+		Player.swing.last_mh = Player.time
+		Player.swing.next_mh = Player.time + mh
 	end
 	if Opt.swing_timer then
 		if missed then
@@ -2126,7 +2136,7 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 			Rampage.last_crit_time = Player.time
 		end
 	elseif dstGUID == Player.guid then
-		Player.last_swing_taken = Player.time
+		Player.swing.last_taken = Player.time
 		local npcId = tonumber(srcGUID:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
 		if npcId > 0 then
 			if spellSchool then
@@ -2138,7 +2148,7 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 			end
 		end
 		if not spellSchool or bit.band(spellSchool, 1) > 0 then
-			Player.last_swing_taken_physical = Player.time
+			Player.swing.last_taken_physical = Player.time
 		end
 		if blocked then
 			Revenge:ApplyAura(dstGUID)
@@ -2159,7 +2169,7 @@ CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, 
 			autoAoe:Add(dstGUID, true)
 		end
 	elseif dstGUID == Player.guid then
-		Player.last_swing_taken = Player.time
+		Player.swing.last_taken = Player.time
 		if Revenge.known and (missType == 'BLOCK' or missType == 'DODGE' or missType == 'PARRY') then
 			Revenge:ApplyAura(dstGUID)
 		end
@@ -2286,8 +2296,8 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
-	Player.last_swing_taken = 0
-	Player.last_swing_taken_physical = 0
+	Player.swing.last_taken = 0
+	Player.swing.last_taken_physical = 0
 	Target.estimated_range = 30
 	Player.previous_gcd = {}
 	if Player.last_ability then
@@ -2339,10 +2349,9 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 		end
 	end
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 16) or 0)
-	Player.equipped_mh = equipType == 'INVTYPE_WEAPON'
+	Player.equipped.twohand = equipType == 'INVTYPE_2HWEAPON'
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 17) or 0)
-	Player.equipped_oh = equipType == 'INVTYPE_WEAPON'
-	Player.equipped_shield = equipType == 'INVTYPE_SHIELD'
+	Player.equipped.shield = equipType == 'INVTYPE_SHIELD'
 
 	Player.set_bonus.t4_dps = (Player:Equipped(29019) and 1 or 0) + (Player:Equipped(29020) and 1 or 0) + (Player:Equipped(29021) and 1 or 0) + (Player:Equipped(29022) and 1 or 0) + (Player:Equipped(29023) and 1 or 0)
 	Player.set_bonus.t5_dps = (Player:Equipped(30118) and 1 or 0) + (Player:Equipped(30119) and 1 or 0) + (Player:Equipped(30120) and 1 or 0) + (Player:Equipped(30121) and 1 or 0) + (Player:Equipped(30122) and 1 or 0)

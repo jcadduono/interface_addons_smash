@@ -1450,6 +1450,13 @@ function ConcussionBlow:Usable()
 	return Ability.Usable(self)
 end
 
+function SweepingStrikes:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	if Opt.auto_aoe and Player.target_mode < 2 then
+		Player:SetTargetMode(2)
+	end
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)

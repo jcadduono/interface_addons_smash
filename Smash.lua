@@ -106,6 +106,9 @@ local UI = {
 	glows = {},
 }
 
+-- combat event related functions container
+local CombatEvent = {}
+
 -- automatically registered events container
 local events = {}
 
@@ -1182,6 +1185,9 @@ function Player:Update()
 	self.health = UnitHealth('player')
 	self.health_max = UnitHealthMax('player')
 	self.rage.current = UnitPower('player', 1)
+	if self.ability_casting and self.ability_casting.rage_cost then
+		self.rage.current = max(0, self.rage.current - self.ability_casting:RageCost())
+	end
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
@@ -1461,6 +1467,24 @@ function SweepingStrikes:CastSuccess(...)
 	end
 end
 
+function Slam:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	self.used_this_swing = true
+end
+
+function Slam:CastLanded(dstGUID, timeStamp, eventType)
+	Ability.CastLanded(self, dstGUID, timeStamp, eventType)
+	CombatEvent.PLAYER_SWING(false, eventType == 'SPELL_MISSED')
+	CombatEvent.PLAYER_SWING(true, eventType == 'SPELL_MISSED') -- reset offHand timer too
+	self.used_this_swing = true
+end
+
+function HeroicStrike:CastLanded(dstGUID, timeStamp, eventType)
+	Ability.CastLanded(self, dstGUID, timeStamp, eventType)
+	CombatEvent.PLAYER_SWING(false, eventType == 'SPELL_MISSED')
+end
+Cleave.CastLanded = HeroicStrike.CastLanded
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1507,6 +1531,7 @@ APL[STANCE.BATTLE].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
+	self.use_slam = ImprovedSlam.known and Player.equipped.twohand
 	if Overpower:Usable() then
 		return Overpower
 	end
@@ -1515,9 +1540,6 @@ APL[STANCE.BATTLE].main = function(self)
 	end
 	if BerserkerStance.known and not Player.equipped.shield and Player.rage.current <= 30 then
 		return BerserkerStance
-	end
-	if ShieldSlam:Usable() then
-		return ShieldSlam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
@@ -1531,25 +1553,35 @@ APL[STANCE.BATTLE].main = function(self)
 	if SweepingStrikes:Usable() and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
 	end
-	if Player.rage.current >= 60 then
-		if Cleave:Usable() and Player.enemies > 1 then
-			UseCooldown(Cleave)
-		end
-		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
-			UseCooldown(HeroicStrike)
-		end
+	if Cleave:Usable() and Player.enemies > 1 and Player.rage.current >= 60 then
+		UseCooldown(Cleave)
+	end
+	if HeroicStrike:Usable() and Player.rage.current >= 75 and (not Execute.known or Target.healthPercentage > 20 or Player.equipped.twohand) then
+		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if not Player.equipped.twohand and Execute:Usable() then
+	if self.use_slam and not Slam.used_this_swing and Slam:Usable() and (Player.swing.next_mh - Player.time - Player.execute_remains) > 2.5 then
+		return Slam
+	end
+	if Bloodthirst:Usable() then
+		return Bloodthirst
+	end
+	if MortalStrike:Usable() then
+		return MortalStrike
+	end
+	if ShieldSlam:Usable() then
+		return ShieldSlam
+	end
+	if Execute:Usable() then
 		return Execute
+	end
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20 or Player.equipped.twohand) and (not ImprovedSlam.known or not Player.equipped.twohand or (Player.swing.next_mh - Player.swing.last_mh) < 2.5 or Player.rage.current >= 75) then
+		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() then
 		return VictoryRush
-	end
-	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
-		return Slam
 	end
 end
 
@@ -1614,9 +1646,6 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if MortalStrike:Usable(0, true) then
 		return MortalStrike
 	end
-	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
-		return Slam
-	end
 	if Devastate.known then
 		if Devastate:Usable() and (Player.rage.current >= 26 or (SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5)) then
 			return Devastate
@@ -1632,6 +1661,8 @@ APL[STANCE.DEFENSIVE].main = function(self)
 end
 
 APL[STANCE.BERSERKER].main = function(self)
+	self.use_slam = ImprovedSlam.known and Player.equipped.twohand
+	self.no_wait = not self.use_slam or (Player.swing.next_mh - Player.time - Player.execute_remains) > 1 or Target.timeToDie < 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1641,23 +1672,23 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Charge:Ready(0.5) and Player.rage.current < 20 then
 			UseExtra(BattleStance)
 		end
-	else
+	elseif self.no_wait then
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
+	if self.use_slam and not Slam.used_this_swing and Slam:Usable() and (Player.swing.next_mh - Player.time - Player.execute_remains) > 2.5 then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
-	if DeathWish:Usable() then
+	if DeathWish:Usable() and self.no_wait then
 		UseCooldown(DeathWish)
 	end
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Recklessness:Usable() and Target.boss and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) and (not DeathWish.known or DeathWish:Up()) then
+	if Recklessness:Usable() and Target.boss and self.no_wait and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) and (not DeathWish.known or DeathWish:Up()) then
 		UseExtra(Recklessness)
 	end
 	if Rampage:Usable(0, true) and Rampage.buff:Remains() < 3 then
@@ -1666,18 +1697,16 @@ APL[STANCE.BERSERKER].main = function(self)
 	if SweepingStrikes:Usable(0.5, true) and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
 	end
-	if Player.rage.current >= 60 then
-		if Cleave:Usable() and Player.enemies > 1 then
-			UseCooldown(Cleave)
-		end
-		if HeroicStrike:Usable() and (not Execute.known or Target.healthPercentage > 20) then
-			UseCooldown(HeroicStrike)
-		end
+	if Cleave:Usable() and Player.enemies > 1 and Player.rage.current >= 60 then
+		UseCooldown(Cleave)
+	end
+	if HeroicStrike:Usable() and Player.rage.current >= 75 and (not Execute.known or Target.healthPercentage > 20 or Player.equipped.twohand) then
+		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if Player.enemies > 1 then
+	if Player.enemies > 1 and self.no_wait then
 		if Whirlwind:Usable() and (Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
 			return Whirlwind
 		end
@@ -1693,36 +1722,49 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Rampage:Usable() and Rampage.buff:Remains() < 6 then
 			return Rampage
 		end
-		if not Player.equipped.twohand and Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
+		if Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
 			return Execute
 		end
-	else
-		if Bloodthirst:Usable() then
-			return Bloodthirst
-		end
-		if MortalStrike:Usable() then
-			return MortalStrike
-		end
+	elseif self.no_wait then
 		if ShieldSlam:Usable() then
 			return ShieldSlam
+		end
+		if not self.use_slam or Player.rage.current >= 45 then
+			if Bloodthirst:Usable() then
+				return Bloodthirst
+			end
+			if MortalStrike:Usable() then
+				return MortalStrike
+			end
 		end
 		if Whirlwind:Usable() and (not Execute.known or Target.healthPercentage > 20) then
 			return Whirlwind
 		end
+		if self.use_slam then
+			if Bloodthirst:Usable() then
+				return Bloodthirst
+			end
+			if MortalStrike:Usable() then
+				return MortalStrike
+			end
+		end
 		if Rampage:Usable() and Rampage.buff:Remains() < 6 then
 			return Rampage
+		end
+		if Execute:Usable() then
+			return Execute
 		end
 		if not Player.equipped.twohand and Execute:Usable(0, true) then
 			return Pool(Execute)
 		end
 	end
-	if ImprovedSlam.known and Player.equipped.twohand and Slam:Usable() and Player.rage.current >= 45 and Player.time - Player.swing.last_mh < 1 then
-		return Slam
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20 or Player.equipped.twohand) and (not ImprovedSlam.known or not Player.equipped.twohand or (Player.swing.next_mh - Player.swing.last_mh) < 2.5 or Player.rage.current >= 75) then
+		UseCooldown(HeroicStrike)
 	end
-	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() then
+	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and self.no_wait then
 		UseCooldown(BerserkerRage)
 	end
-	if VictoryRush:Usable() then
+	if VictoryRush:Usable() and self.no_wait then
 		return VictoryRush
 	end
 end
@@ -2065,8 +2107,6 @@ function events:ADDON_LOADED(name)
 	end
 end
 
-local CombatEvent = {}
-
 CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _, _, _, ...)
 	Player.time = timeStamp
 	Player.ctime = GetTime()
@@ -2108,27 +2148,29 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	end
 end
 
-CombatEvent.PLAYER_SWING = function(missed, offHand)
+CombatEvent.PLAYER_SWING = function(offHand, missed)
 	local mh, oh = UnitAttackSpeed('player')
-	if offHand and oh then
+	if offHand then
 		Player.swing.last_oh = Player.time
-		Player.swing.next_oh = Player.time + oh
-	else
-		Player.swing.last_mh = Player.time
-		Player.swing.next_mh = Player.time + mh
-	end
-	if Opt.swing_timer then
-		if missed then
-			smashPanel.text.tr:SetTextColor(1, 0, 0, 1)
-		else
-			smashPanel.text.tr:SetTextColor(1, 1, 1, 1)
+		Player.swing.next_oh = Player.time + (oh or 0)
+		if Opt.swing_timer then
+			smashPanel.text.tr:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
 		end
+		return
+	end
+	Player.swing.last_mh = Player.time
+	Player.swing.next_mh = Player.time + (mh or 0)
+	if Opt.swing_timer then
+		smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
+	end
+	if Slam.known then
+		Slam.used_this_swing = false
 	end
 end
 
 CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, spellSchool, resisted, blocked, absorbed, critical, glancing, crushing, offHand)
 	if srcGUID == Player.guid then
-		CombatEvent.PLAYER_SWING(false, offHand)
+		CombatEvent.PLAYER_SWING(offHand, false)
 		if Opt.auto_aoe then
 			autoAoe:Add(dstGUID, true)
 		end
@@ -2161,7 +2203,7 @@ end
 
 CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, amountMissed)
 	if srcGUID == Player.guid then
-		CombatEvent.PLAYER_SWING(true, offHand)
+		CombatEvent.PLAYER_SWING(offHand, true)
 		if Overpower.known and missType == 'DODGE' then
 			Overpower:ApplyAura(dstGUID)
 		end
@@ -2236,12 +2278,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 		ability:CastLanded(dstGUID, timeStamp, eventType)
 		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
 			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
-		end
-		if ability == HeroicStrike or ability == Cleave or ability == Slam then
-			CombatEvent.PLAYER_SWING(event == 'SPELL_MISSED')
-			if ability == Slam then
-				CombatEvent.PLAYER_SWING(false, true) -- reset offHand timer too
-			end
 		end
 		if Rampage.known and event == 'SPELL_DAMAGE' and critical then
 			Rampage.last_crit_time = Player.time

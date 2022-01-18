@@ -97,6 +97,7 @@ local function InitOpts()
 		pot = false,
 		trinket = true,
 		swing_timer = true,
+		cshout = true,
 	})
 end
 
@@ -158,6 +159,7 @@ local Player = {
 		last_oh = 0,
 		next_mh = 0,
 		next_oh = 0,
+		remains = 0,
 		last_taken = 0,
 		last_taken_physical = 0,
 	},
@@ -1128,6 +1130,7 @@ function Player:UpdateAbilities()
 		Rampage.buff.spellId = Rampage.buff.spellIds[Rampage.rank]
 		Rampage.buff.rank = Rampage.rank
 	end
+	Slam.use = Slam.known and ImprovedSlam.known and Player.equipped.twohand
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1521,6 +1524,7 @@ local APL = {
 }
 
 APL[STANCE.BATTLE].main = function(self)
+	Slam.wait = Slam.use and (Player.swing.next_mh - Player.time - Player.execute_remains) < 1 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1531,7 +1535,6 @@ APL[STANCE.BATTLE].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	self.use_slam = ImprovedSlam.known and Player.equipped.twohand
 	if Overpower:Usable() then
 		return Overpower
 	end
@@ -1562,7 +1565,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if self.use_slam and not Slam.used_this_swing and Slam:Usable() and (Player.swing.next_mh - Player.time - Player.execute_remains) > 2.5 then
+	if Slam.use and not Slam.used_this_swing and Slam:Usable() and (Player.swing.next_mh - Player.time - Player.execute_remains) > 2.5 then
 		return Slam
 	end
 	if Bloodthirst:Usable() then
@@ -1586,6 +1589,7 @@ APL[STANCE.BATTLE].main = function(self)
 end
 
 APL[STANCE.DEFENSIVE].main = function(self)
+	Slam.wait = Slam.use and (Player.swing.next_mh - Player.time - Player.execute_remains) < 1 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1661,8 +1665,8 @@ APL[STANCE.DEFENSIVE].main = function(self)
 end
 
 APL[STANCE.BERSERKER].main = function(self)
-	self.use_slam = ImprovedSlam.known and Player.equipped.twohand
-	self.no_wait = not self.use_slam or (Player.swing.next_mh - Player.time - Player.execute_remains) > 1 or Target.timeToDie < 2
+	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
+	Slam.wait = Slam.use and Player.swing.remains < 1 and (Player.swing.next_mh - Player.swing.last_mh) > 2.5 and Player.rage.current < 80 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1672,23 +1676,23 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Charge:Ready(0.5) and Player.rage.current < 20 then
 			UseExtra(BattleStance)
 		end
-	elseif self.no_wait then
+	elseif not Slam.wait then
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if self.use_slam and not Slam.used_this_swing and Slam:Usable() and (Player.swing.next_mh - Player.time - Player.execute_remains) > 2.5 then
+	if Slam.use and not Slam.used_this_swing and Slam:Usable() and Player.swing.remains > 2.5 and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost())) then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
-	if DeathWish:Usable() and self.no_wait then
+	if DeathWish:Usable() and not Slam.wait then
 		UseCooldown(DeathWish)
 	end
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Recklessness:Usable() and Target.boss and self.no_wait and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) and (not DeathWish.known or DeathWish:Up()) then
+	if Recklessness:Usable() and Target.boss and not Slam.wait and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) and (not DeathWish.known or DeathWish:Up()) then
 		UseExtra(Recklessness)
 	end
 	if Rampage:Usable(0, true) and Rampage.buff:Remains() < 3 then
@@ -1706,7 +1710,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if Player.enemies > 1 and self.no_wait then
+	if Player.enemies > 1 and not Slam.wait then
 		if Whirlwind:Usable() and (Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
 			return Whirlwind
 		end
@@ -1725,11 +1729,11 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
 			return Execute
 		end
-	elseif self.no_wait then
+	elseif not Slam.wait then
 		if ShieldSlam:Usable() then
 			return ShieldSlam
 		end
-		if not self.use_slam or Player.rage.current >= 45 then
+		if not Slam.use or Player.rage.current >= 45 then
 			if Bloodthirst:Usable() then
 				return Bloodthirst
 			end
@@ -1740,7 +1744,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Whirlwind:Usable() and (not Execute.known or Target.healthPercentage > 20) then
 			return Whirlwind
 		end
-		if self.use_slam then
+		if Slam.use then
 			if Bloodthirst:Usable() then
 				return Bloodthirst
 			end
@@ -1761,10 +1765,10 @@ APL[STANCE.BERSERKER].main = function(self)
 	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20 or Player.equipped.twohand) and (not ImprovedSlam.known or not Player.equipped.twohand or (Player.swing.next_mh - Player.swing.last_mh) < 2.5 or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
-	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and self.no_wait then
+	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and not Slam.wait then
 		UseCooldown(BerserkerRage)
 	end
-	if VictoryRush:Usable() and self.no_wait then
+	if VictoryRush:Usable() and not Slam.wait then
 		return VictoryRush
 	end
 end
@@ -1775,7 +1779,7 @@ APL.Buffs = function(self, remains)
 		self.bs_remains = self.bs_mine > 0 and self.bs_mine or BattleShout:Remains()
 		self.bs_mine = self.bs_mine > 0
 	end
-	if CommandingShout.known then
+	if CommandingShout.known and Opt.cshout then
 		self.cs_mine = CommandingShout:Remains(true)
 		self.cs_remains = self.cs_mine > 0 and self.cs_mine or CommandingShout:Remains()
 		self.cs_mine = self.cs_mine > 0
@@ -2011,7 +2015,11 @@ function UI:UpdateDisplay()
 	if Opt.swing_timer then
 		local mh, oh = Player:NextSwing()
 		if (mh - Player.time) > 0 then
-			text_tl = format('%.1f', mh - Player.time)
+			if Slam.wait then
+				text_center = format('SLAM\n%.1fs', mh - Player.time)
+			else
+				text_tl = format('%.1f', mh - Player.time)
+			end
 		end
 		if (oh - Player.time) > 0 then
 			text_tr = format('%.1f', oh - Player.time)
@@ -2751,7 +2759,13 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		if msg[2] then
 			Opt.swing_timer = msg[2] == 'on'
 		end
-		return Status('Show time remaining until next swing when rage starved', Opt.swing_timer)
+		return Status('Show time remaining until next swing (main-hand top-left, off-hand top-right)', Opt.swing_timer)
+	end
+	if startsWith(msg[1], 'cs') then
+		if msg[2] then
+			Opt.cshout = msg[2] == 'on'
+		end
+		return Status('Use Commanding Shout if another warrior uses Battle Shout', Opt.cshout)
 	end
 	if msg[1] == 'reset' then
 		smashPanel:ClearAllPoints()
@@ -2781,7 +2795,8 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
-		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing when rage starved',
+		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing',
+		'cshout |cFF00C000on|r/|cFFC00000off|r - use Commanding Shout if another warrior uses Battle Shout',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Smash1 .. ' ' .. cmd)

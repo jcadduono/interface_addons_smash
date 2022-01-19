@@ -98,6 +98,7 @@ local function InitOpts()
 		trinket = true,
 		swing_timer = true,
 		cshout = true,
+		last_shout = 'battle',
 	})
 end
 
@@ -1488,6 +1489,16 @@ function HeroicStrike:CastLanded(dstGUID, timeStamp, eventType)
 end
 Cleave.CastLanded = HeroicStrike.CastLanded
 
+function BattleShout:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	Opt.last_shout = 'battle'
+end
+
+function CommandingShout:CastSuccess(...)
+	Ability.CastSuccess(self, ...)
+	Opt.last_shout = 'commanding'
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1774,20 +1785,22 @@ APL[STANCE.BERSERKER].main = function(self)
 end
 
 APL.Buffs = function(self, remains)
-	if BattleShout.known then
-		self.bs_mine = BattleShout:Remains(true)
-		self.bs_remains = self.bs_mine > 0 and self.bs_mine or BattleShout:Remains()
-		self.bs_mine = self.bs_mine > 0
+	self.bs_mine = BattleShout:Remains(true)
+	self.bs_remains = self.bs_mine > 0 and self.bs_mine or BattleShout:Remains()
+	self.bs_mine = self.bs_mine > 0
+	self.cs_mine = CommandingShout:Remains(true)
+	self.cs_remains = self.cs_mine > 0 and self.cs_mine or CommandingShout:Remains()
+	self.cs_mine = self.cs_mine > 0
+	if Opt.last_shout == 'battle' and BattleShout:Usable() and (self.bs_remains == 0 or (self.bs_mine and self.bs_remains < min(30, remains))) then
+		return BattleShout
 	end
-	if CommandingShout.known and Opt.cshout then
-		self.cs_mine = CommandingShout:Remains(true)
-		self.cs_remains = self.cs_mine > 0 and self.cs_mine or CommandingShout:Remains()
-		self.cs_mine = self.cs_mine > 0
+	if Opt.last_shout == 'commanding' and CommandingShout:Usable() and (self.cs_remains == 0 or (self.cs_mine and self.cs_remains < min(30, remains))) then
+		return CommandingShout
 	end
 	if BattleShout:Usable() and not self.cs_mine and (self.bs_remains == 0 or (self.bs_mine and self.bs_remains < min(30, remains))) then
 		return BattleShout
 	end
-	if CommandingShout:Usable() and not self.bs_mine and (self.cs_remains == 0 or (self.cs_mine and self.cs_remains < min(30, remains))) then
+	if Opt.cshout and CommandingShout:Usable() and not self.bs_mine and (self.cs_remains == 0 or (self.cs_mine and self.cs_remains < min(30, remains))) then
 		return CommandingShout
 	end
 	if DemoralizingShout.known and Player:TimeInCombat() > 0 then

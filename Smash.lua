@@ -99,6 +99,7 @@ local function InitOpts()
 		swing_timer = true,
 		cshout = true,
 		last_shout = 'battle',
+		slam_min_speed = 1.9,
 	})
 end
 
@@ -1538,7 +1539,7 @@ local APL = {
 APL[STANCE.BATTLE].main = function(self)
 	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
 	Player.swing.speed = Player.swing.next_mh - Player.swing.last_mh
-	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > 1.9 and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1579,7 +1580,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if Slam.use and Slam:Usable() and Player.swing.remains > 1.9 and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) then
+	if Slam.use and Slam:Usable() and Player.swing.remains > Opt.slam_min_speed and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) then
 		return Slam
 	end
 	if Bloodthirst:Usable() then
@@ -1594,7 +1595,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if Execute:Usable() then
 		return Execute
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.speed < 1.9 or Player.rage.current >= 75) then
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() then
@@ -1605,7 +1606,7 @@ end
 APL[STANCE.DEFENSIVE].main = function(self)
 	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
 	Player.swing.speed = Player.swing.next_mh - Player.swing.last_mh
-	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > 1.9 and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1683,7 +1684,7 @@ end
 APL[STANCE.BERSERKER].main = function(self)
 	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
 	Player.swing.speed = Player.swing.next_mh - Player.swing.last_mh
-	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > 1.9 and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1697,7 +1698,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Player.swing.remains > 1.9 and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) and (Player.enemies == 1 or not Whirlwind:Usable() or (not Slam.used_this_swing and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
+	if Slam.use and Slam:Usable() and Player.swing.remains > Opt.slam_min_speed and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) and (Player.enemies == 1 or not Whirlwind:Usable() or (not Slam.used_this_swing and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
@@ -1769,7 +1770,7 @@ APL[STANCE.BERSERKER].main = function(self)
 			return Pool(Execute)
 		end
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.speed < 1.9 or Player.rage.current >= 75) then
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
 	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and not Slam.wait then
@@ -2776,6 +2777,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Use Commanding Shout if another warrior uses Battle Shout', Opt.cshout)
 	end
+	if startsWith(msg[1], 'sl') then
+		if msg[2] then
+			Opt.slam_min_speed = tonumber(msg[2]) or 1.9
+		end
+		return Status('Minimum swing speed for using Slam', Opt.slam_min_speed, 'seconds')
+	end
 	if msg[1] == 'reset' then
 		smashPanel:ClearAllPoints()
 		smashPanel:SetPoint('CENTER', 0, -169)
@@ -2806,6 +2813,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing',
 		'cshout |cFF00C000on|r/|cFFC00000off|r - use Commanding Shout if another warrior uses Battle Shout',
+		'slam |cFFFFD000[seconds]|r  - minimum swing speed for using Slam (default is 1.9 seconds)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Smash1 .. ' ' .. cmd)

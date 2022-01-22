@@ -157,12 +157,18 @@ local Player = {
 		lead = 0,
 	},
 	swing = {
-		last_mh = 0,
-		last_oh = 0,
-		next_mh = 0,
-		next_oh = 0,
-		remains = 0,
-		speed = 0,
+		mh = {
+			last = 0,
+			next = 0,
+			speed = 0,
+			remains = 0,
+		},
+		oh = {
+			last = 0,
+			next = 0,
+			speed = 0,
+			remains = 0,
+		},
 		last_taken = 0,
 		last_taken_physical = 0,
 	},
@@ -1071,14 +1077,6 @@ function Player:RageDeficit()
 	return self.rage.max - self.rage.current
 end
 
-function Player:NextSwing()
-	if self.ability_casting then
-		local mh, oh = UnitAttackSpeed('player')
-		return mh and (Player.time + self.execute_remains + mh) or 0, oh and (Player.time + self.execute_remains + oh) or 0
-	end
-	return self.swing.next_mh, self.swing.next_oh
-end
-
 function Player:UnderMeleeAttack(physical)
 	return (self.time - (physical and self.swing.last_taken_physical or self.swing.last_taken)) < 3
 end
@@ -1194,6 +1192,10 @@ function Player:Update()
 	if self.ability_casting and self.ability_casting.rage_cost then
 		self.rage.current = max(0, self.rage.current - self.ability_casting:RageCost())
 	end
+	self.swing.mh.remains = max(0, self.swing.mh.next - self.time - self.execute_remains)
+	self.swing.mh.speed = self.swing.mh.next - self.swing.mh.last
+	self.swing.oh.remains = max(0, self.swing.oh.next - self.time - self.execute_remains)
+	self.swing.oh.speed = self.swing.oh.next - self.swing.oh.last
 	speed, max_speed = GetUnitSpeed('player')
 	self.moving = speed ~= 0
 	self.movement_speed = max_speed / 7 * 100
@@ -1537,9 +1539,7 @@ local APL = {
 }
 
 APL[STANCE.BATTLE].main = function(self)
-	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
-	Player.swing.speed = Player.swing.next_mh - Player.swing.last_mh
-	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < 1 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1580,7 +1580,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if Slam.use and Slam:Usable() and Player.swing.remains > Opt.slam_min_speed and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) then
+	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) then
 		return Slam
 	end
 	if Bloodthirst:Usable() then
@@ -1595,7 +1595,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if Execute:Usable() then
 		return Execute
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() then
@@ -1604,9 +1604,7 @@ APL[STANCE.BATTLE].main = function(self)
 end
 
 APL[STANCE.DEFENSIVE].main = function(self)
-	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
-	Player.swing.speed = Player.swing.next_mh - Player.swing.last_mh
-	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < 1 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1682,9 +1680,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 end
 
 APL[STANCE.BERSERKER].main = function(self)
-	Player.swing.remains = Player.swing.next_mh - Player.time - Player.execute_remains
-	Player.swing.speed = Player.swing.next_mh - Player.swing.last_mh
-	Slam.wait = Slam.use and Player.swing.remains < 1 and Player.swing.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < 1 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1698,7 +1694,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Player.swing.remains > Opt.slam_min_speed and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) and (Player.enemies == 1 or not Whirlwind:Usable() or (not Slam.used_this_swing and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
+	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and not Slam.used_this_swing and (Player.enemies == 1 or not Whirlwind:Usable() or (not Slam.used_this_swing and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
@@ -1748,16 +1744,16 @@ APL[STANCE.BERSERKER].main = function(self)
 			return Execute
 		end
 	elseif not Slam.wait then
-		if Bloodthirst:Usable() and (Target.healthPercentage > 20 or not Slam.use or not Execute.known or Player.rage.current >= (Bloodthirst:RageCost() + Execute:RageCost())) then
+		if Bloodthirst:Usable() then
 			return Bloodthirst
 		end
-		if MortalStrike:Usable() and (Target.healthPercentage > 20 or not Slam.use or not Execute.known or Player.rage.current >= (MortalStrike:RageCost() + Execute:RageCost())) then
+		if MortalStrike:Usable() then
 			return MortalStrike
 		end
 		if ShieldSlam:Usable() then
 			return ShieldSlam
 		end
-		if Whirlwind:Usable() and (Target.healthPercentage > 20 or not Slam.use or not Execute.known or Player.rage.current >= (Whirlwind:RageCost() + Execute:RageCost())) then
+		if Whirlwind:Usable() then
 			return Whirlwind
 		end
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
@@ -1766,11 +1762,8 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Execute:Usable() then
 			return Execute
 		end
-		if not Player.equipped.twohand and Execute:Usable(0, true) then
-			return Pool(Execute)
-		end
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
 	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and not Slam.wait then
@@ -1778,6 +1771,9 @@ APL[STANCE.BERSERKER].main = function(self)
 	end
 	if VictoryRush:Usable() and not Slam.wait then
 		return VictoryRush
+	end
+	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known) then
+		return Slam
 	end
 end
 
@@ -2023,16 +2019,18 @@ function UI:UpdateDisplay()
 		dim = Opt.dimmer
 	end
 	if Opt.swing_timer then
-		local mh, oh = Player:NextSwing()
-		if (mh - Player.time) > 0 then
+		local time = GetTime()
+		local mh = Player.swing.mh.next - (time - Player.time_diff)
+		local oh = Player.swing.oh.next - (time - Player.time_diff)
+		if mh > 0 then
 			if Slam.wait then
-				text_center = format('SLAM\n%.1fs', mh - Player.time)
+				text_center = format('SLAM\n%.1fs', mh)
 			else
-				text_tl = format('%.1f', mh - Player.time)
+				text_tl = format('%.1f', mh)
 			end
 		end
-		if (oh - Player.time) > 0 then
-			text_tr = format('%.1f', oh - Player.time)
+		if oh > 0 then
+			text_tr = format('%.1f', oh)
 		end
 	end
 	if Player.cd and Player.cd.queue_time then
@@ -2169,15 +2167,15 @@ end
 CombatEvent.PLAYER_SWING = function(offHand, missed)
 	local mh, oh = UnitAttackSpeed('player')
 	if offHand then
-		Player.swing.last_oh = Player.time
-		Player.swing.next_oh = Player.time + (oh or 0)
+		Player.swing.oh.last = Player.time
+		Player.swing.oh.next = Player.time + (oh or 0)
 		if Opt.swing_timer then
 			smashPanel.text.tr:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
 		end
 		return
 	end
-	Player.swing.last_mh = Player.time
-	Player.swing.next_mh = Player.time + (mh or 0)
+	Player.swing.mh.last = Player.time
+	Player.swing.mh.next = Player.time + (mh or 0)
 	if Opt.swing_timer then
 		smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
 	end

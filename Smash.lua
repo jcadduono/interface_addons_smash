@@ -1475,16 +1475,15 @@ function SweepingStrikes:CastSuccess(...)
 	end
 end
 
-function Slam:CastSuccess(...)
-	Ability.CastSuccess(self, ...)
-	self.used_this_swing = true
-end
-
 function Slam:CastLanded(dstGUID, timeStamp, eventType)
 	Ability.CastLanded(self, dstGUID, timeStamp, eventType)
 	CombatEvent.PLAYER_SWING(false, eventType == 'SPELL_MISSED')
 	CombatEvent.PLAYER_SWING(true, eventType == 'SPELL_MISSED') -- reset offHand timer too
 	self.used_this_swing = true
+end
+
+function Slam:FirstInSwing()
+	return not (self.used_this_swing or self:Casting())
 end
 
 function HeroicStrike:CastLanded(dstGUID, timeStamp, eventType)
@@ -1574,13 +1573,13 @@ APL[STANCE.BATTLE].main = function(self)
 	if Cleave:Usable() and Player.enemies > 1 and Player.rage.current >= 60 then
 		UseCooldown(Cleave)
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 75 and (not Execute.known or Target.healthPercentage > 20) then
+	if HeroicStrike:Usable() and Player.rage.current >= 75 and not Execute:Usable() then
 		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
-	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and (not Slam.used_this_swing or (Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known))) then
+	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and (Slam:FirstInSwing() or (Player.rage.current >= 75 and not Execute:Usable())) then
 		return Slam
 	end
 	if Bloodthirst:Usable() then
@@ -1595,7 +1594,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if Execute:Usable() then
 		return Execute
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() then
@@ -1694,7 +1693,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and not Slam.used_this_swing and (Player.enemies == 1 or not Whirlwind:Usable() or (not Slam.used_this_swing and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
+	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Slam:FirstInSwing() and (Player.enemies == 1 or not Whirlwind:Usable() or (Slam:FirstInSwing() and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
@@ -1718,7 +1717,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if Cleave:Usable() and Player.enemies > 1 and Player.rage.current >= 60 then
 		UseCooldown(Cleave)
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 75 and (not Execute.known or Target.healthPercentage > 20) then
+	if HeroicStrike:Usable() and Player.rage.current >= 75 and not Execute:Usable() then
 		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
@@ -1763,7 +1762,7 @@ APL[STANCE.BERSERKER].main = function(self)
 			return Execute
 		end
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Execute.known or Target.healthPercentage > 20) and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
+	if HeroicStrike:Usable() and Player.rage.current >= 60 and not Execute:Usable() and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
 		UseCooldown(HeroicStrike)
 	end
 	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and not Slam.wait then
@@ -1772,7 +1771,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if VictoryRush:Usable() and not Slam.wait then
 		return VictoryRush
 	end
-	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 75 and (Target.healthPercentage > 20 or not Execute.known) then
+	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 75 and not Execute:Usable() then
 		return Slam
 	end
 end

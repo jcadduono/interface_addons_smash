@@ -1564,7 +1564,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+	if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 		return Rampage
 	end
 	if SweepingStrikes:Usable() and Player.enemies > 1 then
@@ -1637,7 +1637,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(2) and Player.rage.current <= 30 then
 		UseExtra(BattleStance)
 	end
-	if Rampage:Usable() and Rampage.buff:Remains() < 6 then
+	if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 		return Rampage
 	end
 	if Revenge:Usable() and Revenge:Remains() < Player.gcd then

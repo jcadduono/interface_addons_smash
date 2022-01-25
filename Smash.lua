@@ -1699,13 +1699,13 @@ APL[STANCE.BERSERKER].main = function(self)
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
-	if DeathWish:Usable() and not Slam.wait then
+	if DeathWish:Usable() and not Slam.wait and (not Target.boss or (Player:TimeInCombat() > 10 and (Target.healthPercentage < 20 or Target.timeToDie > DeathWish:CooldownDuration() + 40))) then
 		UseCooldown(DeathWish)
 	end
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Recklessness:Usable() and Target.boss and not Slam.wait and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd)) and (not DeathWish.known or DeathWish:Up()) then
+	if Recklessness:Usable() and Target.boss and Target.healthPercentage < 20 and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd) or SweepingStrikes:Remains() > 8) and (not DeathWish.known or DeathWish:Up() or Target.timeToDie < DeathWish:Cooldown() + 20) then
 		UseExtra(Recklessness)
 	end
 	if Rampage:Usable(0, true) and Rampage.buff:Remains() < 3 then

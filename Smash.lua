@@ -174,6 +174,7 @@ local Player = {
 	},
 	equipped = {
 		twohand = false,
+		offhand = false,
 		shield = false,
 	},
 	set_bonus = {
@@ -1742,7 +1743,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 			return Rampage
 		end
-		if Execute:Usable() and SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(3)) then
+		if Execute:Usable() and (Player.equipped.offhand or (SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(3)))) then
 			return Execute
 		end
 	elseif not Slam.wait then
@@ -2407,6 +2408,7 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 16) or 0)
 	Player.equipped.twohand = equipType == 'INVTYPE_2HWEAPON'
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 17) or 0)
+	Player.equipped.offhand = equipType == 'INVTYPE_WEAPON'
 	Player.equipped.shield = equipType == 'INVTYPE_SHIELD'
 
 	Player.set_bonus.t4_dps = (Player:Equipped(29019) and 1 or 0) + (Player:Equipped(29020) and 1 or 0) + (Player:Equipped(29021) and 1 or 0) + (Player:Equipped(29022) and 1 or 0) + (Player:Equipped(29023) and 1 or 0)

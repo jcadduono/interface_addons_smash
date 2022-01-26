@@ -1693,7 +1693,7 @@ APL[STANCE.BERSERKER].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Slam:FirstInSwing() and (Player.enemies == 1 or not Whirlwind:Usable() or (Slam:FirstInSwing() and Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost()))) then
+	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost())) then
 		return Slam
 	end
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
@@ -1714,32 +1714,35 @@ APL[STANCE.BERSERKER].main = function(self)
 	if SweepingStrikes:Usable(0.5, true) and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
 	end
-	if Cleave:Usable() and Player.enemies > 1 and Player.rage.current >= 60 then
-		UseCooldown(Cleave)
-	end
-	if HeroicStrike:Usable() and Player.rage.current >= 75 and not Execute:Usable() then
-		UseCooldown(HeroicStrike)
+	if Player.enemies > 1 then
+		if Cleave:Usable() and Player.rage.current >= 55 then
+			UseCooldown(Cleave)
+		end
+	else
+		if HeroicStrike:Usable() and Player.rage.current >= 70 and not Execute:Usable() then
+			UseCooldown(HeroicStrike)
+		end
 	end
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
 	end
 	if Player.enemies > 1 and not Slam.wait then
-		if Whirlwind:Usable() and (Player.rage.current >= 55 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+		if Whirlwind:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + Whirlwind:RageCost())) then
 			return Whirlwind
 		end
-		if Bloodthirst:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+		if Bloodthirst:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + Bloodthirst:RageCost())) then
 			return Bloodthirst
 		end
-		if MortalStrike:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+		if MortalStrike:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + MortalStrike:RageCost())) then
 			return MortalStrike
 		end
-		if ShieldSlam:Usable() and (Player.rage.current >= 60 or not SweepingStrikes.known or not SweepingStrikes:Ready(2)) then
+		if ShieldSlam:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + ShieldSlam:RageCost())) then
 			return ShieldSlam
 		end
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 			return Rampage
 		end
-		if Execute:Usable() and (Player.rage.current >= 80 or (SweepingStrikes.known and SweepingStrikes:Up())) and (not Whirlwind.known or not Whirlwind:Ready(2)) and (not SweepingStrikes.known or not SweepingStrikes:Ready(4)) then
+		if Execute:Usable() and SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(3)) then
 			return Execute
 		end
 	elseif not Slam.wait then
@@ -1762,17 +1765,19 @@ APL[STANCE.BERSERKER].main = function(self)
 			return Execute
 		end
 	end
-	if HeroicStrike:Usable() and Player.rage.current >= 60 and not Execute:Usable() and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed or Player.rage.current >= 75) then
-		UseCooldown(HeroicStrike)
-	end
-	if BerserkerRage:Usable() and Player.rage.current < 60 and Player:UnderAttack() and not Slam.wait then
+	if BerserkerRage:Usable() and Player.rage.current < 45 and Player:UnderAttack() and not Slam.wait then
 		UseCooldown(BerserkerRage)
 	end
 	if VictoryRush:Usable() and not Slam.wait then
 		return VictoryRush
 	end
-	if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 75 and not Execute:Usable() then
-		return Slam
+	if Player.enemies == 1 then
+		if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 85 then
+			return Slam
+		end
+		if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed) then
+			UseCooldown(HeroicStrike)
+		end
 	end
 end
 

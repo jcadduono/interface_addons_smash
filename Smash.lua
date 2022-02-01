@@ -1700,13 +1700,13 @@ APL[STANCE.BERSERKER].main = function(self)
 	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
 		UseCooldown(Bloodrage)
 	end
-	if DeathWish:Usable() and not Slam.wait and (not Target.boss or (Player:TimeInCombat() > 10 and (Target.healthPercentage < 20 or Target.timeToDie > DeathWish:CooldownDuration() + 40))) then
+	if DeathWish:Usable() and not Slam.wait and (not Target.boss or (Player:TimeInCombat() > 10 and (Target.healthPercentage < 20 or Target.timeToDie < 35 or Target.timeToDie > DeathWish:CooldownDuration() + 40))) then
 		UseCooldown(DeathWish)
 	end
 	if BloodFury:Usable() and not (Player:UnderAttack() or Player:HealthPct() < 60) then
 		UseCooldown(BloodFury)
 	end
-	if Recklessness:Usable() and Target.boss and Target.healthPercentage < 20 and (not Rampage.known or Rampage.buff:Remains() > 15) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd) or SweepingStrikes:Remains() > 8) and (not DeathWish.known or DeathWish:Up() or Target.timeToDie < DeathWish:Cooldown() + 20) then
+	if Recklessness:Usable() and Target.boss and (Target.healthPercentage < 20 or Target.timeToDie < 25) and (not Rampage.known or Rampage.buff:Remains() > 8) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd) or SweepingStrikes:Remains() > 8) and (not DeathWish.known or DeathWish:Up() or Target.timeToDie < DeathWish:Cooldown() + 20) then
 		UseExtra(Recklessness)
 	end
 	if Rampage:Usable(0, true) and Rampage.buff:Remains() < 3 then
@@ -1716,11 +1716,11 @@ APL[STANCE.BERSERKER].main = function(self)
 		UseCooldown(SweepingStrikes)
 	end
 	if Player.enemies > 1 then
-		if Cleave:Usable() and Player.rage.current >= 55 then
+		if Cleave:Usable() and Player.rage.current >= (Player.equipped.twohand and 90 or 55) then
 			UseCooldown(Cleave)
 		end
-	else
-		if HeroicStrike:Usable() and Player.rage.current >= 70 and not Execute:Usable() then
+	elseif Player.equipped.offhand then
+		if HeroicStrike:Usable() and Player.rage.current >= 55 and not Execute:Usable() then
 			UseCooldown(HeroicStrike)
 		end
 	end
@@ -1747,16 +1747,16 @@ APL[STANCE.BERSERKER].main = function(self)
 			return Execute
 		end
 	elseif not Slam.wait then
-		if Bloodthirst:Usable() then
+		if Bloodthirst:Usable() and (Player.equipped.twohand or not Execute:Usable()) then
 			return Bloodthirst
 		end
-		if MortalStrike:Usable() then
+		if MortalStrike:Usable() and (Player.equipped.twohand or not Execute:Usable()) then
 			return MortalStrike
 		end
 		if ShieldSlam:Usable() then
 			return ShieldSlam
 		end
-		if Whirlwind:Usable() then
+		if Whirlwind:Usable() and (Player.equipped.twohand or not Execute:Usable()) then
 			return Whirlwind
 		end
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
@@ -1769,16 +1769,20 @@ APL[STANCE.BERSERKER].main = function(self)
 	if BerserkerRage:Usable() and Player.rage.current < 45 and Player:UnderAttack() and not Slam.wait then
 		UseCooldown(BerserkerRage)
 	end
+	if Player.enemies > 1 then
+		if Cleave:Usable() and Player.rage.current >= 55 then
+			UseCooldown(Cleave)
+		end
+	else
+		if HeroicStrike:Usable() and Player.rage.current >= (Player.equipped.twohand and 70 or 55) and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed) then
+			UseCooldown(HeroicStrike)
+		end
+	end
 	if VictoryRush:Usable() and not Slam.wait then
 		return VictoryRush
 	end
-	if Player.enemies == 1 then
-		if Slam.use and Slam:Usable() and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 85 then
-			return Slam
-		end
-		if HeroicStrike:Usable() and Player.rage.current >= 60 and (not Slam.use or Player.swing.mh.speed < Opt.slam_min_speed) then
-			UseCooldown(HeroicStrike)
-		end
+	if Slam.use and Slam:Usable() and Player.enemies == 1 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 85 then
+		return Slam
 	end
 end
 

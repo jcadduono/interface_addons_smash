@@ -100,6 +100,7 @@ local function InitOpts()
 		cshout = true,
 		last_shout = 'battle',
 		slam_min_speed = 1.9,
+		slam_cutoff = 1,
 	})
 end
 
@@ -1537,7 +1538,7 @@ local APL = {
 }
 
 APL[STANCE.BATTLE].main = function(self)
-	local cutoff = Slam.use and max(0, Player.swing.mh.remains - 1) or 0
+	local cutoff = Slam.use and max(0, Player.swing.mh.remains - Opt.slam_cutoff) or 0
 	Slam.wait = Slam.use and cutoff == 0 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
@@ -1710,7 +1711,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 end
 
 APL[STANCE.BERSERKER].main = function(self)
-	local cutoff = Slam.use and max(0, Player.swing.mh.remains - 1) or 0
+	local cutoff = Slam.use and max(0, Player.swing.mh.remains - Opt.slam_cutoff) or 0
 	Slam.wait = Slam.use and cutoff == 0 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
@@ -2836,6 +2837,12 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Minimum swing speed for using Slam', Opt.slam_min_speed, 'seconds')
 	end
+	if startsWith(msg[1], 'cu') then
+		if msg[2] then
+			Opt.slam_cutoff = tonumber(msg[2]) or 1
+		end
+		return Status('Minimum remaining swing time to use abilities before Slam', Opt.slam_cutoff, 'seconds')
+	end
 	if msg[1] == 'reset' then
 		smashPanel:ClearAllPoints()
 		smashPanel:SetPoint('CENTER', 0, -169)
@@ -2867,6 +2874,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing',
 		'cshout |cFF00C000on|r/|cFFC00000off|r - use Commanding Shout if another warrior uses Battle Shout',
 		'slam |cFFFFD000[seconds]|r  - minimum swing speed for using Slam (default is 1.9 seconds)',
+		'cutoff |cFFFFD000[seconds]|r  - minimum remaining swing time to use abilities before Slam (default is 1.0 seconds)',
 		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Smash1 .. ' ' .. cmd)

@@ -1538,8 +1538,7 @@ local APL = {
 }
 
 APL[STANCE.BATTLE].main = function(self)
-	local cutoff = Slam.use and max(0, Player.swing.mh.remains - Opt.slam_cutoff) or 0
-	Slam.wait = Slam.use and cutoff == 0 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1550,7 +1549,7 @@ APL[STANCE.BATTLE].main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if Overpower:Usable(cutoff) then
+	if Overpower:Usable() then
 		return Overpower
 	end
 	if DefensiveStance.known and Player.equipped.shield and (Player.enemies == 1 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
@@ -1604,17 +1603,6 @@ APL[STANCE.BATTLE].main = function(self)
 		end
 		if Execute:Usable() then
 			return Execute
-		end
-		if cutoff > 0 then
-			if Bloodthirst:Usable(cutoff) and (Player.equipped.twohand or not Execute:Usable()) then
-				return Bloodthirst
-			end
-			if MortalStrike:Usable(cutoff) and (Player.equipped.twohand or not Execute:Usable()) then
-				return MortalStrike
-			end
-			if ShieldSlam:Usable(cutoff) then
-				return ShieldSlam
-			end
 		end
 	end
 	if Player.enemies > 1 then
@@ -1711,8 +1699,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 end
 
 APL[STANCE.BERSERKER].main = function(self)
-	local cutoff = Slam.use and max(0, Player.swing.mh.remains - Opt.slam_cutoff) or 0
-	Slam.wait = Slam.use and cutoff == 0 and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
 		if apl then return apl end
@@ -1760,16 +1747,16 @@ APL[STANCE.BERSERKER].main = function(self)
 		return VictoryRush
 	end
 	if Player.enemies > 1 and not Slam.wait then
-		if Whirlwind:Usable(cutoff) and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + Whirlwind:RageCost())) then
+		if Whirlwind:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + Whirlwind:RageCost())) then
 			return Whirlwind
 		end
-		if Bloodthirst:Usable(cutoff) and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + Bloodthirst:RageCost())) then
+		if Bloodthirst:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + Bloodthirst:RageCost())) then
 			return Bloodthirst
 		end
-		if MortalStrike:Usable(cutoff) and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + MortalStrike:RageCost())) then
+		if MortalStrike:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + MortalStrike:RageCost())) then
 			return MortalStrike
 		end
-		if ShieldSlam:Usable(cutoff) and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + ShieldSlam:RageCost())) then
+		if ShieldSlam:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:RageCost() + ShieldSlam:RageCost())) then
 			return ShieldSlam
 		end
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
@@ -1796,20 +1783,6 @@ APL[STANCE.BERSERKER].main = function(self)
 		end
 		if Execute:Usable() then
 			return Execute
-		end
-		if cutoff > 0 then
-			if Bloodthirst:Usable(cutoff) and (Player.equipped.twohand or not Execute:Usable()) then
-				return Bloodthirst
-			end
-			if MortalStrike:Usable(cutoff) and (Player.equipped.twohand or not Execute:Usable()) then
-				return MortalStrike
-			end
-			if ShieldSlam:Usable(cutoff) then
-				return ShieldSlam
-			end
-			if Whirlwind:Usable(cutoff) and (Player.equipped.twohand or not Execute:Usable()) then
-				return Whirlwind
-			end
 		end
 	end
 	if BerserkerRage:Usable() and Player.rage.current < 45 and Player:UnderAttack() and not Slam.wait then

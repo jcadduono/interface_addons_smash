@@ -742,8 +742,8 @@ function Ability:Targets()
 	return 0
 end
 
-function Ability:CastSuccess(dstGUID, timeStamp)
-	self.last_used = timeStamp
+function Ability:CastSuccess(dstGUID)
+	self.last_used = Player.time
 	Player.last_ability = self
 	if self.triggers_gcd then
 		Player.previous_gcd[10] = nil
@@ -759,7 +759,7 @@ function Ability:CastSuccess(dstGUID, timeStamp)
 	end
 end
 
-function Ability:CastLanded(dstGUID, timeStamp, eventType)
+function Ability:CastLanded(dstGUID, event)
 	if not self.traveling then
 		return
 	end
@@ -772,7 +772,7 @@ function Ability:CastLanded(dstGUID, timeStamp, eventType)
 		end
 	end
 	if oldest then
-		Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, timeStamp - oldest.start)))
+		Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, Player.time - oldest.start)))
 		self.traveling[oldest.guid] = nil
 	end
 end
@@ -1062,8 +1062,7 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-local WolfsheadHelm = InventoryItem:Add(8345)
-local StaffOfNaturalFury = InventoryItem:Add(31334)
+
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
@@ -1475,10 +1474,10 @@ function SweepingStrikes:CastSuccess(...)
 	end
 end
 
-function Slam:CastLanded(dstGUID, timeStamp, eventType)
-	Ability.CastLanded(self, dstGUID, timeStamp, eventType)
-	CombatEvent.PLAYER_SWING(false, eventType == 'SPELL_MISSED')
-	CombatEvent.PLAYER_SWING(true, eventType == 'SPELL_MISSED') -- reset offHand timer too
+function Slam:CastLanded(dstGUID, event)
+	Ability.CastLanded(self, dstGUID, event)
+	CombatEvent.PLAYER_SWING(false, event == 'SPELL_MISSED')
+	CombatEvent.PLAYER_SWING(true, event == 'SPELL_MISSED') -- reset offHand timer too
 	self.used_this_swing = true
 end
 
@@ -1486,9 +1485,9 @@ function Slam:FirstInSwing()
 	return not (self.used_this_swing or self:Casting())
 end
 
-function HeroicStrike:CastLanded(dstGUID, timeStamp, eventType)
-	Ability.CastLanded(self, dstGUID, timeStamp, eventType)
-	CombatEvent.PLAYER_SWING(false, eventType == 'SPELL_MISSED')
+function HeroicStrike:CastLanded(dstGUID, event)
+	Ability.CastLanded(self, dstGUID, event)
+	CombatEvent.PLAYER_SWING(false, event == 'SPELL_MISSED')
 end
 Cleave.CastLanded = HeroicStrike.CastLanded
 
@@ -2284,13 +2283,13 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
 	UI:UpdateCombatWithin(0.05)
 	if event == 'SPELL_CAST_SUCCESS' then
-		ability:CastSuccess(dstGUID, timeStamp)
+		ability:CastSuccess(dstGUID)
 		if Opt.previous and smashPanel:IsVisible() then
 			smashPreviousPanel.ability = ability
 			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
@@ -2314,12 +2313,12 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	if Opt.auto_aoe then
 		if event == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
 			autoAoe:Remove(dstGUID)
-		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and eventType == 'SPELL_AURA_REFRESH') then
+		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
 			ability:RecordTargetHit(dstGUID)
 		end
 	end
 	if event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_DAMAGE' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
-		ability:CastLanded(dstGUID, timeStamp, eventType)
+		ability:CastLanded(dstGUID, event)
 		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
 			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
 		end

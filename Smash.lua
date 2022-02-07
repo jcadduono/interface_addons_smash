@@ -506,13 +506,23 @@ function Ability:Usable(seconds, pool)
 	if self.requires_charge and self:Charges() == 0 then
 		return false
 	end
-	if self.requires_react and self:Down() then
+	if self.requires_react and self:React() == 0 then
 		return false
 	end
 	if self.requires_shield and not Player.equipped.shield then
 		return false
 	end
 	return self:Ready(seconds)
+end
+
+function Ability:React()
+	if self.aura_targets then
+		local guid = self.auraTarget == 'player' and Player.guid or Target.guid
+		if self.aura_targets[guid] then
+			return max(0, self.aura_targets[guid].expires - Player.time - Player.execute_remains)
+		end
+	end
+	return 0
 end
 
 function Ability:Remains(mine)
@@ -913,11 +923,11 @@ Recklessness.buff_duration = 15
 Recklessness.cooldown_duration = 1800
 local Slam = Ability:Add({1464, 8820, 11604, 11605, 25241, 25242}, false, true)
 Slam.rage_cost = 15
-local VictoryRush = Ability:Add({34428}, false, true)
+local VictoryRush = Ability:Add({34428}, true, true)
 VictoryRush.buff_duration = 20
-VictoryRush.last_kill_time = 0
 VictoryRush.activated = false
 VictoryRush.requires_react = true
+VictoryRush:TrackAuras()
 local Whirlwind = Ability:Add({1680}, false, true)
 Whirlwind.cooldown_duration = 10
 Whirlwind.rage_cost = 25
@@ -931,7 +941,6 @@ local ImprovedSlam = Ability:Add({12862, 12330}, false, true)
 local Rampage = Ability:Add({29801, 30030, 30033}, true, true)
 Rampage.buff_duration = 5
 Rampage.rage_cost = 20
-Rampage.last_crit_time = 0
 Rampage.requires_react = true
 Rampage.buff = Ability:Add({30029, 30031, 30032}, true, true)
 Rampage.buff.buff_duration = 30
@@ -1428,20 +1437,6 @@ function Charge:Usable()
 	return Ability.Usable(self)
 end
 
-function Overpower:Remains()
-	if self.aura_targets[Target.guid] then
-		return max(0, self.aura_targets[Target.guid].expires - Player.time - Player.execute_remains)
-	end
-	return 0
-end
-
-function Revenge:Remains()
-	if self.aura_targets[Player.guid] then
-		return max(0, self.aura_targets[Player.guid].expires - Player.time - Player.execute_remains)
-	end
-	return 0
-end
-
 function Rend:Usable()
 	if Target.creature_type == 'Mechanical' or Target.creature_type == 'Elemental' then
 		return false
@@ -1449,15 +1444,11 @@ function Rend:Usable()
 	return Ability.Usable(self)
 end
 
-function Rampage:Remains()
-	return max(0, self.buff_duration - (Player.time - self.last_crit_time) - Player.execute_remains)
-end
-
-function VictoryRush:Remains()
+function VictoryRush:React()
 	if not self.activated then
 		return 0
 	end
-	return max(0, self.buff_duration - (Player.time - self.last_kill_time) - Player.execute_remains)
+	return Ability.React(self)
 end
 
 function ConcussionBlow:Usable()
@@ -1659,7 +1650,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 		return Rampage
 	end
-	if Revenge:Usable() and Revenge:Remains() < Player.gcd then
+	if Revenge:Usable() and Revenge:React() < Player.gcd then
 		return Revenge
 	end
 	if ShieldSlam:Usable() then
@@ -1742,7 +1733,7 @@ APL[STANCE.BERSERKER].main = function(self)
 			UseCooldown(HeroicStrike)
 		end
 	end
-	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
+	if VictoryRush:Usable() and VictoryRush:React() < Player.gcd then
 		return VictoryRush
 	end
 	if Player.enemies > 1 and not Slam.wait then
@@ -2187,7 +2178,7 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 		autoAoe:Remove(dstGUID)
 	end
 	if event == 'PARTY_KILL' and srcGUID == Player.guid then
-		VictoryRush.last_kill_time = Player.time
+		VictoryRush:ApplyAura(srcGUID)
 	end
 end
 
@@ -2218,7 +2209,7 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 			autoAoe:Add(dstGUID, true)
 		end
 		if Rampage.known and critical then
-			Rampage.last_crit_time = Player.time
+			Rampage:ApplyAura(srcGUID)
 		end
 	elseif dstGUID == Player.guid then
 		Player.swing.last_taken = Player.time
@@ -2296,6 +2287,12 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			smashPreviousPanel.icon:SetTexture(ability.icon)
 			smashPreviousPanel:Show()
 		end
+		if ability.aura_targets and ability.requires_react then
+			if ability.activated then
+				ability.activated = false
+			end
+			ability:RemoveAura(ability.auraTarget == 'player' and srcGUID or dstGUID)
+		end
 		return
 	end
 	if dstGUID == Player.guid then
@@ -2323,7 +2320,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
 		end
 		if Rampage.known and event == 'SPELL_DAMAGE' and critical then
-			Rampage.last_crit_time = Player.time
+			Rampage:ApplyAura(srcGUID)
 		end
 	end
 end
@@ -2333,7 +2330,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 end
 
 function events:SPELL_UPDATE_USABLE()
-	if VictoryRush.known and VictoryRush.last_kill_time > 0 then
+	if VictoryRush.known and VictoryRush.aura_targets[Player.guid] then
 		if IsUsableSpell(VictoryRush.spellId) then
 			if not VictoryRush.activated then
 				VictoryRush.activated = true
@@ -2341,7 +2338,7 @@ function events:SPELL_UPDATE_USABLE()
 		else
 			if VictoryRush.activated then
 				VictoryRush.activated = false
-				VictoryRush.last_kill_time = 0
+				VictoryRush:RemoveAura(Player.guid)
 			end
 		end
 	end

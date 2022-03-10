@@ -14,6 +14,7 @@ local GetSpellCooldown = _G.GetSpellCooldown
 local GetSpellInfo = _G.GetSpellInfo
 local GetTime = _G.GetTime
 local GetUnitSpeed = _G.GetUnitSpeed
+local IsCurrentSpell = _G.IsCurrentSpell
 local UnitCastingInfo = _G.UnitCastingInfo
 local UnitChannelInfo = _G.UnitChannelInfo
 local UnitAttackSpeed = _G.UnitAttackSpeed
@@ -139,6 +140,7 @@ local Player = {
 	level = 1,
 	stance = STANCE.NONE,
 	target_mode = 0,
+	cast_remains = 0,
 	execute_remains = 0,
 	haste_factor = 1,
 	gcd = 1.5,
@@ -278,6 +280,11 @@ smashCooldownPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
 smashCooldownPanel.dimmer:Hide()
 smashCooldownPanel.swipe = CreateFrame('Cooldown', nil, smashCooldownPanel, 'CooldownFrameTemplate')
 smashCooldownPanel.swipe:SetAllPoints(smashCooldownPanel)
+smashCooldownPanel.text = smashCooldownPanel:CreateFontString(nil, 'OVERLAY')
+smashCooldownPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
+smashCooldownPanel.text:SetAllPoints(smashCooldownPanel)
+smashCooldownPanel.text:SetJustifyH('CENTER')
+smashCooldownPanel.text:SetJustifyV('CENTER')
 local smashInterruptPanel = CreateFrame('Frame', 'smashInterruptPanel', UIParent)
 smashInterruptPanel:SetFrameStrata('BACKGROUND')
 smashInterruptPanel:SetSize(64, 64)
@@ -491,7 +498,7 @@ function Ability:Match(spell)
 end
 
 function Ability:Ready(seconds)
-	return self:Cooldown() <= (seconds or 0)
+	return self:Cooldown() <= (seconds or 0) and (not self.requires_react or self:React() > (seconds or 0))
 end
 
 function Ability:Usable(seconds, pool)
@@ -504,9 +511,6 @@ function Ability:Usable(seconds, pool)
 		end
 	end
 	if self.requires_charge and self:Charges() == 0 then
-		return false
-	end
-	if self.requires_react and self:React() == 0 then
 		return false
 	end
 	if self.requires_shield and not Player.equipped.shield then
@@ -752,12 +756,26 @@ function Ability:Targets()
 	return 0
 end
 
+function Ability:CastStart(dstGUID)
+	return
+end
+
+function Ability:CastFailed(dstGUID)
+	return
+end
+
 function Ability:CastSuccess(dstGUID)
 	self.last_used = Player.time
 	Player.last_ability = self
 	if self.triggers_gcd then
 		Player.previous_gcd[10] = nil
 		table.insert(Player.previous_gcd, 1, self)
+	end
+	if self.aura_targets and self.requires_react then
+		if self.activated then
+			self.activated = false
+		end
+		self:RemoveAura(self.auraTarget == 'player' and Player.guid or dstGUID)
 	end
 	if self.traveling and self.next_castGUID then
 		self.traveling[self.next_castGUID] = {
@@ -767,23 +785,34 @@ function Ability:CastSuccess(dstGUID)
 		}
 		self.next_castGUID = nil
 	end
+	if Opt.previous then
+		smashPreviousPanel.ability = self
+		smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
+		smashPreviousPanel.icon:SetTexture(self.icon)
+		smashPreviousPanel:SetShown(smashPanel:IsVisible())
+	end
 end
 
 function Ability:CastLanded(dstGUID, event)
-	if not self.traveling then
-		return
+	if self.swing_queue then
+		CombatEvent.PLAYER_SWING(false, event == 'SPELL_MISSED')
 	end
-	local oldest
-	for guid, cast in next, self.traveling do
-		if Player.time - cast.start >= self.max_range / self.velocity + 0.2 then
-			self.traveling[guid] = nil -- spell traveled 0.2s past max range, delete it, this should never happen
-		elseif cast.dstGUID == dstGUID and (not oldest or cast.start < oldest.start) then
-			oldest = cast
+	if self.traveling then
+		local oldest
+		for guid, cast in next, self.traveling do
+			if Player.time - cast.start >= self.max_range / self.velocity + 0.2 then
+				self.traveling[guid] = nil -- spell traveled 0.2s past max range, delete it, this should never happen
+			elseif cast.dstGUID == dstGUID and (not oldest or cast.start < oldest.start) then
+				oldest = cast
+			end
+		end
+		if oldest then
+			Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, Player.time - oldest.start)))
+			self.traveling[oldest.guid] = nil
 		end
 	end
-	if oldest then
-		Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, Player.time - oldest.start)))
-		self.traveling[oldest.guid] = nil
+	if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPreviousPanel.ability == self then
+		smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
 	end
 end
 
@@ -1117,6 +1146,14 @@ function Player:Equipped(itemID, slot)
 	return false
 end
 
+function Player:UpdateTime(timeStamp)
+	self.ctime = GetTime()
+	if timeStamp then
+		self.time_diff = self.ctime - timeStamp
+	end
+	self.time = self.ctime - self.time_diff
+end
+
 function Player:UpdateAbilities()
 	self.rage.max = UnitPowerMax('player', 1)
 
@@ -1147,6 +1184,7 @@ function Player:UpdateAbilities()
 	abilities.velocity = {}
 	abilities.autoAoe = {}
 	abilities.trackAuras = {}
+	abilities.swingQueue = {}
 	for _, ability in next, abilities.all do
 		if ability.known then
 			for i, spellId in next, ability.spellIds do
@@ -1160,6 +1198,9 @@ function Player:UpdateAbilities()
 			end
 			if ability.aura_targets then
 				abilities.trackAuras[#abilities.trackAuras + 1] = ability
+			end
+			if ability.swing_queue then
+				abilities.swingQueue[#abilities.swingQueue + 1] = ability
 			end
 		end
 	end
@@ -1181,27 +1222,24 @@ end
 
 function Player:Update()
 	local _, start, duration, remains, spellId, speed, max_speed
-	self.ctime = GetTime()
-	self.time = self.ctime - self.time_diff
 	self.main =  nil
 	self.cd = nil
 	self.interrupt = nil
 	self.extra = nil
 	self.pool_rage = nil
-	self.wait_seconds = nil
+	self:UpdateTime()
 	start, duration = GetSpellCooldown(47524)
 	self.gcd_remains = start > 0 and duration - (self.ctime - start) or 0
 	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
 	self.ability_casting = abilities.bySpellId[spellId]
-	self.execute_remains = max(remains and (remains / 1000 - self.ctime) or 0, self.gcd_remains)
+	self.cast_remains = remains and (remains / 1000 - self.ctime) or 0
+	self.execute_remains = max(self.cast_remains, self.gcd_remains)
 	self.health = UnitHealth('player')
 	self.health_max = UnitHealthMax('player')
 	self.rage.current = UnitPower('player', 1)
 	if self.ability_casting and self.ability_casting.rage_cost then
 		self.rage.current = max(0, self.rage.current - self.ability_casting:RageCost())
 	end
-	self.swing.mh.speed = self.swing.mh.next - self.swing.mh.last
-	self.swing.oh.speed = self.swing.oh.next - self.swing.oh.last
 	self.swing.mh.remains = self.ability_casting == Slam and self.swing.mh.speed or max(0, self.swing.mh.next - self.time - self.execute_remains)
 	self.swing.oh.remains = self.ability_casting == Slam and self.swing.oh.speed or max(0, self.swing.oh.next - self.time - self.execute_remains)
 	speed, max_speed = GetUnitSpeed('player')
@@ -1274,7 +1312,7 @@ function Target:Update()
 		self.creature_type = 'Humanoid'
 		self.player = false
 		self.level = Player.level
-		self.hostile = true
+		self.hostile = false
 		self:UpdateHealth(true)
 		if Opt.always_on then
 			UI:UpdateCombat()
@@ -1476,12 +1514,6 @@ function Slam:FirstInSwing()
 	return not (self.used_this_swing or self:Casting())
 end
 
-function HeroicStrike:CastLanded(dstGUID, event)
-	Ability.CastLanded(self, dstGUID, event)
-	CombatEvent.PLAYER_SWING(false, event == 'SPELL_MISSED')
-end
-Cleave.CastLanded = HeroicStrike.CastLanded
-
 function BattleShout:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 	Opt.last_shout = 'battle'
@@ -1508,11 +1540,6 @@ end
 
 local function Pool(ability, extra)
 	Player.pool_rage = min(Player.rage.max, ability:RageCost() + (extra or 0))
-	return ability
-end
-
-local function WaitForDrop(ability)
-	Player.wait_seconds = ability:Remains()
 	return ability
 end
 
@@ -1551,7 +1578,7 @@ APL[STANCE.BATTLE].main = function(self)
 	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost())) then
 		return Slam
 	end
-	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
+	if Bloodrage:Usable() and Player.rage.current < 30 and not (Player:UnderAttack() or Player:HealthPct() < 60 or BerserkerRage:Up()) then
 		UseCooldown(Bloodrage)
 	end
 	if DeathWish:Usable() and not Slam.wait and (not Target.boss or (Player:TimeInCombat() > 10 and (Target.healthPercentage < 20 or Target.timeToDie < 35 or Target.timeToDie > DeathWish:CooldownDuration() + 40))) then
@@ -1633,7 +1660,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	if Taunt:Usable() and Player.threat.status < 3 and UnitAffectingCombat('target') then
 		UseCooldown(Taunt)
 	end
-	if Bloodrage:Usable() and Player.rage.current < 20 and Player:HealthPct() > 60 then
+	if Bloodrage:Usable() and Player.rage.current < 20 and not (Player:HealthPct() < 60 or BerserkerRage:Up()) then
 		UseCooldown(Bloodrage)
 	end
 	if Player.rage.current >= 44 then
@@ -1706,7 +1733,7 @@ APL[STANCE.BERSERKER].main = function(self)
 	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:RageCost() + Whirlwind:RageCost())) then
 		return Slam
 	end
-	if Bloodrage:Usable() and Player.rage.current < 40 and Player:HealthPct() > 60 then
+	if Bloodrage:Usable() and Player.rage.current < 30 and not (Player:UnderAttack() or Player:HealthPct() < 60 or BerserkerRage:Up()) then
 		UseCooldown(Bloodrage)
 	end
 	if DeathWish:Usable() and not Slam.wait and (not Target.boss or (Player:TimeInCombat() > 10 and (Target.healthPercentage < 20 or Target.timeToDie < 35 or Target.timeToDie > DeathWish:CooldownDuration() + 40))) then
@@ -1752,10 +1779,13 @@ APL[STANCE.BERSERKER].main = function(self)
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 			return Rampage
 		end
-		if Execute:Usable() and (Player.equipped.offhand or (SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(3)))) then
+		if Execute:Usable() and (Player.equipped.offhand or Recklessness:Up() or (SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(3)))) then
 			return Execute
 		end
 	elseif not Slam.wait then
+		if Execute:Usable() and Player.rage.current >= 55 and Player.swing.mh.remains < (Player.gcd * 3 - Opt.slam_cutoff) then
+			return Execute
+		end
 		if Bloodthirst:Usable() and (Player.equipped.twohand or not Execute:Usable()) then
 			return Bloodthirst
 		end
@@ -1783,7 +1813,7 @@ APL[STANCE.BERSERKER].main = function(self)
 			UseCooldown(Cleave)
 		end
 	else
-		if HeroicStrike:Usable() and Player.rage.current >= (Player.equipped.twohand and 65 or 55) then
+		if HeroicStrike:Usable() and Player.rage.current >= (Player.equipped.twohand and 65 or 55) and not Execute:Usable() then
 			UseCooldown(HeroicStrike)
 		end
 	end
@@ -1935,7 +1965,7 @@ function UI:UpdateGlows()
 		icon = glow.button.icon:GetTexture()
 		if icon and glow.button.icon:IsVisible() and (
 			(Opt.glow.main and Player.main and icon == Player.main.icon) or
-			(Opt.glow.cooldown and Player.cd and icon == Player.cd.icon) or
+			(Opt.glow.cooldown and Player.cd and icon == Player.cd.icon and not Player.cd.queued) or
 			(Opt.glow.interrupt and Player.interrupt and icon == Player.interrupt.icon) or
 			(Opt.glow.extra and Player.extra and icon == Player.extra.icon)
 			) then
@@ -2014,9 +2044,34 @@ function UI:Disappear()
 	UI:UpdateGlows()
 end
 
+function UI:UpdateSwingTimers()
+	local text_center, text_tl, text_tr
+	local now = GetTime()
+
+	if Opt.swing_timer then
+		local mh = Player.swing.mh.next - (now - Player.time_diff)
+		local oh = Player.swing.oh.next - (now - Player.time_diff)
+		if mh > 0 then
+			if Slam.wait then
+				text_center = format('SLAM\n%.1fs', mh)
+				smashPanel.text.center:SetText(text_center)
+			else
+				text_tl = format('%.1f', mh)
+			end
+		end
+		if oh > 0 then
+			text_tr = format('%.1f', oh)
+		end
+	end
+
+	smashPanel.text.tl:SetText(text_tl)
+	smashPanel.text.tr:SetText(text_tr)
+end
+
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, dim_cd, text_center, text_tl, text_tr
+	local dim, dim_cd, text_center, text_cd
+
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
@@ -2032,26 +2087,7 @@ function UI:UpdateDisplay()
 			dim = Opt.dimmer
 		end
 	end
-	if Player.wait_seconds then
-		text_center = format('WAIT\n%.1fs', Player.wait_seconds)
-		dim = Opt.dimmer
-	end
-	if Opt.swing_timer then
-		local time = GetTime()
-		local mh = Player.swing.mh.next - (time - Player.time_diff)
-		local oh = Player.swing.oh.next - (time - Player.time_diff)
-		if mh > 0 then
-			if Slam.wait then
-				text_center = format('SLAM\n%.1fs', mh)
-			else
-				text_tl = format('%.1f', mh)
-			end
-		end
-		if oh > 0 then
-			text_tr = format('%.1f', oh)
-		end
-	end
-	if Player.cd and Player.cd.queue_time then
+	if Player.cd and Player.cd.queued then
 		if not smashCooldownPanel.swingQueueOverlayOn then
 			smashCooldownPanel.swingQueueOverlayOn = true
 			smashCooldownPanel.border:SetTexture(ADDON_PATH .. 'swingqueue.blp')
@@ -2060,13 +2096,26 @@ function UI:UpdateDisplay()
 		smashCooldownPanel.swingQueueOverlayOn = false
 		smashCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 	end
+	if Player.main and Player.main.requires_react then
+		local react = Player.main:React()
+		if react > 0 then
+			text_center = format('%.1f', react)
+		end
+	end
+	if Player.cd and Player.cd.requires_react then
+		local react = Player.cd:React()
+		if react > 0 then
+			text_cd = format('%.1f', react)
+		end
+	end
 
 	smashPanel.dimmer:SetShown(dim)
 	smashPanel.text.center:SetText(text_center)
-	smashPanel.text.tl:SetText(text_tl)
-	smashPanel.text.tr:SetText(text_tr)
+	smashCooldownPanel.text:SetText(text_cd)
 	smashCooldownPanel.dimmer:SetShown(dim_cd)
 	--smashPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
+
+	self:UpdateSwingTimers()
 end
 
 function UI:UpdateCombat()
@@ -2104,6 +2153,13 @@ function UI:UpdateCombat()
 		smashInterruptPanel.border:SetShown(Player.interrupt)
 		smashInterruptPanel:SetShown(start)
 	end
+	if Opt.previous and smashPreviousPanel.ability then
+		if (Player.time - smashPreviousPanel.ability.last_used) > 10 then
+			smashPreviousPanel.ability = nil
+			smashPreviousPanel:Hide()
+		end
+	end
+
 	smashPanel.icon:SetShown(Player.main)
 	smashPanel.border:SetShown(Player.main)
 	smashCooldownPanel:SetShown(Player.cd)
@@ -2130,9 +2186,6 @@ function events:ADDON_LOADED(name)
 			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
 			print('Type |cFFFFD000' .. SLASH_Smash1 .. '|r for a list of commands.')
 		end
-		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
-		end
 		InitOpts()
 		UI:UpdateDraggable()
 		UI:UpdateAlpha()
@@ -2142,9 +2195,7 @@ function events:ADDON_LOADED(name)
 end
 
 CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _, _, _, ...)
-	Player.time = timeStamp
-	Player.ctime = GetTime()
-	Player.time_diff = Player.ctime - Player.time
+	Player:UpdateTime(timeStamp)
 	local e = event
 	if (
 	   e == 'UNIT_DESTROYED' or
@@ -2154,6 +2205,7 @@ CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _
 	then
 		e = 'UNIT_DIED'
 	elseif (
+	   e == 'RANGE_DAMAGE' or
 	   e == 'SPELL_CAST_START' or
 	   e == 'SPELL_CAST_SUCCESS' or
 	   e == 'SPELL_CAST_FAILED' or
@@ -2185,20 +2237,22 @@ end
 CombatEvent.PLAYER_SWING = function(offHand, missed)
 	local mh, oh = UnitAttackSpeed('player')
 	if offHand then
+		Player.swing.oh.speed = (oh or 0)
 		Player.swing.oh.last = Player.time
-		Player.swing.oh.next = Player.time + (oh or 0)
+		Player.swing.oh.next = Player.time + Player.swing.oh.speed
 		if Opt.swing_timer then
 			smashPanel.text.tr:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
 		end
-		return
-	end
-	Player.swing.mh.last = Player.time
-	Player.swing.mh.next = Player.time + (mh or 0)
-	if Opt.swing_timer then
-		smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
-	end
-	if Slam.known then
-		Slam.used_this_swing = false
+	else
+		Player.swing.mh.speed = (mh or 0)
+		Player.swing.mh.last = Player.time
+		Player.swing.mh.next = Player.time + Player.swing.mh.speed
+		if Opt.swing_timer then
+			smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
+		end
+		if Slam.known then
+			Slam.used_this_swing = false
+		end
 	end
 end
 
@@ -2281,20 +2335,15 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	UI:UpdateCombatWithin(0.05)
 	if event == 'SPELL_CAST_SUCCESS' then
 		ability:CastSuccess(dstGUID)
-		if Opt.previous and smashPanel:IsVisible() then
-			smashPreviousPanel.ability = ability
-			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-			smashPreviousPanel.icon:SetTexture(ability.icon)
-			smashPreviousPanel:Show()
-		end
-		if ability.aura_targets and ability.requires_react then
-			if ability.activated then
-				ability.activated = false
-			end
-			ability:RemoveAura(ability.auraTarget == 'player' and srcGUID or dstGUID)
-		end
+		return
+	elseif event == 'SPELL_CAST_START' then
+		ability:CastStart(dstGUID)
+		return
+	elseif event == 'SPELL_CAST_FAILED' then
+		ability:CastFailed(dstGUID)
 		return
 	end
+
 	if dstGUID == Player.guid then
 		return -- ignore buffs beyond here
 	end
@@ -2314,11 +2363,8 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			ability:RecordTargetHit(dstGUID)
 		end
 	end
-	if event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_DAMAGE' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
+	if event == 'RANGE_DAMAGE' or event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event)
-		if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPanel:IsVisible() and ability == smashPreviousPanel.ability then
-			smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
-		end
 		if Rampage.known and event == 'SPELL_DAMAGE' and critical then
 			Rampage:ApplyAura(srcGUID)
 		end
@@ -2327,21 +2373,6 @@ end
 
 function events:COMBAT_LOG_EVENT_UNFILTERED()
 	CombatEvent.TRIGGER(CombatLogGetCurrentEventInfo())
-end
-
-function events:SPELL_UPDATE_USABLE()
-	if VictoryRush.known and VictoryRush.aura_targets[Player.guid] then
-		if IsUsableSpell(VictoryRush.spellId) then
-			if not VictoryRush.activated then
-				VictoryRush.activated = true
-			end
-		else
-			if VictoryRush.activated then
-				VictoryRush.activated = false
-				VictoryRush:RemoveAura(Player.guid)
-			end
-		end
-	end
 end
 
 function events:PLAYER_TARGET_CHANGED()
@@ -2360,9 +2391,68 @@ function events:UNIT_FLAGS(unitID)
 	end
 end
 
-function events:UNIT_POWER_UPDATE(srcName, powerType)
-	if srcName == 'player' and powerType == 'RAGE' then
+function events:UNIT_POWER_UPDATE(unitID, powerType)
+	if unitID == 'player' and powerType == 'RAGE' then
 		UI:UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_START(unitID, castGUID, spellId)
+	if Opt.interrupt and unitID == 'target' then
+		UI:UpdateCombatWithin(0.05)
+	end
+end
+
+function events:UNIT_SPELLCAST_STOP(unitID, castGUID, spellId)
+	if Opt.interrupt and unitID == 'target' then
+		UI:UpdateCombatWithin(0.05)
+	end
+end
+events.UNIT_SPELLCAST_FAILED = events.UNIT_SPELLCAST_STOP
+events.UNIT_SPELLCAST_INTERRUPTED = events.UNIT_SPELLCAST_STOP
+
+function events:UNIT_SPELLCAST_SUCCEEDED(unitID, castGUID, spellId)
+	if unitID ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
+		return
+	end
+	local ability = abilities.bySpellId[spellId]
+	if not ability then
+		return
+	end
+	if ability.traveling then
+		ability.next_castGUID = castGUID
+	end
+end
+
+function events:CURRENT_SPELL_CAST_CHANGED()
+	Player.ability_queued = false
+	for _, ability in next, abilities.swingQueue do
+		ability.queued = false
+		for i, spellId in next, ability.spellIds do
+			if IsCurrentSpell(spellId) then
+				ability.queued = true
+				Player.ability_queued = ability
+				if Opt.swing_timer then
+					smashPanel.text.tl:SetTextColor(0.2, 0.8, 1, 1)
+				end
+				break
+			end
+		end
+	end
+end
+
+function events:SPELL_UPDATE_USABLE()
+	if VictoryRush.known and VictoryRush.aura_targets[Player.guid] then
+		if IsUsableSpell(VictoryRush.spellId) then
+			if not VictoryRush.activated then
+				VictoryRush.activated = true
+			end
+		else
+			if VictoryRush.activated then
+				VictoryRush.activated = false
+				VictoryRush:RemoveAura(Player.guid)
+			end
+		end
 	end
 end
 
@@ -2372,10 +2462,10 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
+	Player.previous_gcd = {}
 	Player.swing.last_taken = 0
 	Player.swing.last_taken_physical = 0
 	Target.estimated_range = 30
-	Player.previous_gcd = {}
 	if Player.last_ability then
 		Player.last_ability = nil
 		smashPreviousPanel:Hide()
@@ -2448,61 +2538,6 @@ function events:SPELL_UPDATE_COOLDOWN()
 			start, duration = GetSpellCooldown(47524)
 		end
 		smashPanel.swipe:SetCooldown(start, duration)
-	end
-end
-
-function events:UNIT_SPELLCAST_START(srcName)
-	if Opt.interrupt and srcName == 'target' then
-		UI:UpdateCombatWithin(0.05)
-	end
-end
-
-function events:UNIT_SPELLCAST_STOP(srcName)
-	if Opt.interrupt and srcName == 'target' then
-		UI:UpdateCombatWithin(0.05)
-	end
-end
-
-function events:UNIT_SPELLCAST_SENT(srcName, dstName, castGUID, spellId)
-	if srcName ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
-		return
-	end
-	local ability = abilities.bySpellId[spellId]
-	if not ability then
-		return
-	end
-	if ability.swing_queue then
-		ability.queue_time = GetTime()
-	end
-end
-
-function events:UNIT_SPELLCAST_FAILED(srcName, castGUID, spellId)
-	if srcName ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
-		return
-	end
-	local ability = abilities.bySpellId[spellId]
-	if not ability then
-		return
-	end
-	if ability.swing_queue then
-		ability.queue_time = nil
-	end
-end
-events.UNIT_SPELLCAST_FAILED_QUIET = events.UNIT_SPELLCAST_FAILED
-
-function events:UNIT_SPELLCAST_SUCCEEDED(srcName, castGUID, spellId)
-	if srcName ~= 'player' or not spellId or castGUID:sub(6, 6) ~= '3' then
-		return
-	end
-	local ability = abilities.bySpellId[spellId]
-	if not ability then
-		return
-	end
-	if ability.traveling then
-		ability.next_castGUID = castGUID
-	end
-	if ability.swing_queue then
-		ability.queue_time = nil
 	end
 end
 
@@ -2792,7 +2827,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		if msg[2] then
 			Opt.swing_timer = msg[2] == 'on'
 		end
-		return Status('Show time remaining until next swing (main-hand top-left, off-hand top-right)', Opt.swing_timer)
+		return Status('Show time remaining until next melee swing (main-hand top-left, off-hand top-right)', Opt.swing_timer)
 	end
 	if startsWith(msg[1], 'cs') then
 		if msg[2] then
@@ -2840,7 +2875,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
-		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next swing',
+		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next melee swing',
 		'cshout |cFF00C000on|r/|cFFC00000off|r - use Commanding Shout if another warrior uses Battle Shout',
 		'slam |cFFFFD000[seconds]|r  - minimum swing speed for using Slam (default is 1.9 seconds)',
 		'cutoff |cFFFFD000[seconds]|r  - minimum remaining swing time to use abilities before Slam (default is 1.0 seconds)',

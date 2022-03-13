@@ -521,9 +521,9 @@ end
 
 function Ability:React()
 	if self.aura_targets then
-		local guid = self.auraTarget == 'player' and Player.guid or Target.guid
-		if self.aura_targets[guid] then
-			return max(0, self.aura_targets[guid].expires - Player.time - Player.execute_remains)
+		local aura = self.aura_targets[self.auraTarget == 'player' and Player.guid or Target.guid]
+		if aura then
+			return max(0, aura.expires - Player.time - Player.execute_remains)
 		end
 	end
 	return 0
@@ -795,7 +795,7 @@ end
 
 function Ability:CastLanded(dstGUID, event)
 	if self.swing_queue then
-		CombatEvent.PLAYER_SWING(false, event == 'SPELL_MISSED')
+		Player:ResetSwing(true, false, event == 'SPELL_MISSED')
 	end
 	if self.traveling then
 		local oldest
@@ -1114,6 +1114,29 @@ end
 
 function Player:RageDeficit()
 	return self.rage.max - self.rage.current
+end
+
+function Player:ResetSwing(mainHand, offHand, missed)
+	local mh, oh = UnitAttackSpeed('player')
+	if mainHand then
+		self.swing.mh.speed = (mh or 0)
+		self.swing.mh.last = self.time
+		self.swing.mh.next = self.time + self.swing.mh.speed
+		if Opt.swing_timer then
+			smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
+		end
+		if Slam.known then
+			Slam.used_this_swing = false
+		end
+	end
+	if offHand then
+		self.swing.oh.speed = (oh or 0)
+		self.swing.oh.last = self.time
+		self.swing.oh.next = self.time + self.swing.oh.speed
+		if Opt.swing_timer then
+			smashPanel.text.tr:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
+		end
+	end
 end
 
 function Player:UnderMeleeAttack(physical)
@@ -1505,8 +1528,7 @@ end
 
 function Slam:CastLanded(dstGUID, event)
 	Ability.CastLanded(self, dstGUID, event)
-	CombatEvent.PLAYER_SWING(false, event == 'SPELL_MISSED')
-	CombatEvent.PLAYER_SWING(true, event == 'SPELL_MISSED') -- reset offHand timer too
+	Player:ResetSwing(true, true, event == 'SPELL_MISSED')
 	self.used_this_swing = true
 end
 
@@ -2234,31 +2256,9 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	end
 end
 
-CombatEvent.PLAYER_SWING = function(offHand, missed)
-	local mh, oh = UnitAttackSpeed('player')
-	if offHand then
-		Player.swing.oh.speed = (oh or 0)
-		Player.swing.oh.last = Player.time
-		Player.swing.oh.next = Player.time + Player.swing.oh.speed
-		if Opt.swing_timer then
-			smashPanel.text.tr:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
-		end
-	else
-		Player.swing.mh.speed = (mh or 0)
-		Player.swing.mh.last = Player.time
-		Player.swing.mh.next = Player.time + Player.swing.mh.speed
-		if Opt.swing_timer then
-			smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
-		end
-		if Slam.known then
-			Slam.used_this_swing = false
-		end
-	end
-end
-
 CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, spellSchool, resisted, blocked, absorbed, critical, glancing, crushing, offHand)
 	if srcGUID == Player.guid then
-		CombatEvent.PLAYER_SWING(offHand, false)
+		Player:ResetSwing(not offHand, offHand)
 		if Opt.auto_aoe then
 			autoAoe:Add(dstGUID, true)
 		end
@@ -2291,7 +2291,7 @@ end
 
 CombatEvent.SWING_MISSED = function(event, srcGUID, dstGUID, missType, offHand, amountMissed)
 	if srcGUID == Player.guid then
-		CombatEvent.PLAYER_SWING(offHand, true)
+		Player:ResetSwing(not offHand, offHand, true)
 		if Overpower.known and missType == 'DODGE' then
 			Overpower:ApplyAura(dstGUID)
 		end

@@ -445,7 +445,12 @@ end
 local Ability = {}
 Ability.__index = Ability
 local abilities = {
-	all = {}
+	all = {},
+	bySpellId = {},
+	velocity = {},
+	autoAoe = {},
+	trackAuras = {},
+	swingQueue = {},
 }
 
 function Ability:Add(spellId, buff, player)
@@ -1203,11 +1208,11 @@ function Player:UpdateAbilities()
 	end
 	Slam.use = Slam.known and ImprovedSlam.known and Player.equipped.twohand
 
-	abilities.bySpellId = {}
-	abilities.velocity = {}
-	abilities.autoAoe = {}
-	abilities.trackAuras = {}
-	abilities.swingQueue = {}
+	wipe(abilities.bySpellId)
+	wipe(abilities.velocity)
+	wipe(abilities.autoAoe)
+	wipe(abilities.trackAuras)
+	wipe(abilities.swingQueue)
 	for _, ability in next, abilities.all do
 		if ability.known then
 			for i, spellId in next, ability.spellIds do
@@ -1569,14 +1574,14 @@ end
 
 local APL = {
 	[STANCE.NONE] = {
-		main = function() end
+		Main = function() end
 	},
 	[STANCE.BATTLE] = {},
 	[STANCE.DEFENSIVE] = {},
 	[STANCE.BERSERKER] = {},
 }
 
-APL[STANCE.BATTLE].main = function(self)
+APL[STANCE.BATTLE].Main = function(self)
 	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
@@ -1661,7 +1666,7 @@ APL[STANCE.BATTLE].main = function(self)
 	end
 end
 
-APL[STANCE.DEFENSIVE].main = function(self)
+APL[STANCE.DEFENSIVE].Main = function(self)
 	Slam.wait = false
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
@@ -1737,7 +1742,7 @@ APL[STANCE.DEFENSIVE].main = function(self)
 	end
 end
 
-APL[STANCE.BERSERKER].main = function(self)
+APL[STANCE.BERSERKER].Main = function(self)
 	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(Target.boss and 180 or 30)
@@ -2145,7 +2150,7 @@ function UI:UpdateCombat()
 
 	Player:Update()
 
-	Player.main = APL[Player.stance]:main()
+	Player.main = APL[Player.stance]:Main()
 	if Player.main then
 		smashPanel.icon:SetTexture(Player.main.icon)
 	end
@@ -2462,10 +2467,10 @@ end
 
 function events:PLAYER_REGEN_ENABLED()
 	Player.combat_start = 0
-	Player.previous_gcd = {}
 	Player.swing.last_taken = 0
 	Player.swing.last_taken_physical = 0
 	Target.estimated_range = 30
+	wipe(Player.previous_gcd)
 	if Player.last_ability then
 		Player.last_ability = nil
 		smashPreviousPanel:Hide()
@@ -2556,6 +2561,7 @@ end
 
 function events:PLAYER_ENTERING_WORLD()
 	Player:Init()
+	Target:Update()
 	C_Timer.After(5, function() events:PLAYER_EQUIPMENT_CHANGED() end)
 end
 

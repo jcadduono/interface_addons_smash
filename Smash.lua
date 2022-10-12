@@ -151,6 +151,7 @@ local Player = {
 	health = {
 		current = 0,
 		max = 100,
+		pct = 0,
 	},
 	rage = {
 		current = 0,
@@ -1027,16 +1028,21 @@ SuddenDeath.buff_duration = 10
 ---- Fury
 local Bloodthirst = Ability:Add(23881, false, true)
 Bloodthirst.cooldown_duration = 4.5
+Bloodthirst.rage_gain = 8
 Bloodthirst.hasted_cooldown = true
 local ExecuteFury = Ability:Add(5308, false, true)
+ExecuteFury.cooldown_duration = 6
+ExecuteFury.rage_gain = 20
+ExecuteFury.hasted_cooldown = true
 local RagingBlow = Ability:Add(85288, false, true)
 RagingBlow.cooldown_duration = 8
+RagingBlow.rage_gain = 12
 RagingBlow.hasted_cooldown = true
 RagingBlow.requires_charge = true
 local Rampage = Ability:Add(184367, false, true)
-Rampage.rage_cost = 85
+Rampage.rage_cost = 80
 local Recklessness = Ability:Add(1719, true, true)
-Recklessness.buff_duration = 10
+Recklessness.buff_duration = 12
 Recklessness.cooldown_duration = 90
 local WhirlwindFury = Ability:Add(190411, false, true, 199667)
 WhirlwindFury:AutoAoe(true)
@@ -1046,10 +1052,7 @@ WhirlwindFury.buff.buff_duration = 20
 local BladestormFury = Ability:Add(46924, true, true)
 BladestormFury.buff_duration = 4
 BladestormFury.cooldown_duration = 60
-local Carnage = Ability:Add(202922, false, true)
 local FrothingBerserker = Ability:Add(215571, false, true)
-local FuriousSlash = Ability:Add(100130, true, true, 202539)
-FuriousSlash.buff_duration = 15
 local Siegebreaker = Ability:Add(280772, false, true, 280773)
 Siegebreaker.buff_duration = 10
 Siegebreaker.cooldown_duration = 30
@@ -1058,6 +1061,8 @@ SuddenDeathFury.buff_duration = 10
 ------ Procs
 local Enrage = Ability:Add(184361, true, true, 184362)
 Enrage.buff_duration = 4
+local Frenzy = Ability:Add(335077, true, true, 335082)
+Frenzy.buff_duration = 12
 ---- Protection
 local DemoralizingShout = Ability:Add(1160, false, true)
 DemoralizingShout.buff_duration = 8
@@ -1113,9 +1118,38 @@ local UnstoppableForce = Ability:Add(275336, false, true)
 ------ Procs
 
 -- Covenant abilities
-
+local Condemn = Ability:Add(317349, false, true) -- Venthyr (replaces Execute)
+Condemn.cooldown_duration = 6
+Condemn.rage_gain = 20
+local EffusiveAnimaAccelerator = Ability:Add(352188, false, true, 353248) -- Kyrian (Forgelite Prime Mikanikos Soulbind)
+EffusiveAnimaAccelerator.buff_duration = 8
+EffusiveAnimaAccelerator.tick_inteval = 2
+EffusiveAnimaAccelerator:AutoAoe(false, 'apply')
+local FirstStrike = Ability:Add(325069, true, true, 325381) -- Night Fae (Korayn Soulbind)
+local Fleshcraft = Ability:Add(324631, true, true, 324867) -- Necrolord
+Fleshcraft.buff_duration = 120
+Fleshcraft.cooldown_duration = 120
+local KevinsOozeling = Ability:Add(352110, true, true, 342181) -- Necrolord (Plague Deviser Marileth Soulbind)
+local KevinsWrath = Ability:Add(352528, false, true) -- debuff applied by Kevin's Oozeling
+KevinsWrath.buff_duration = 30
+local LeadByExample = Ability:Add(342156, true, true, 342181) -- Necrolord (Emeni Soulbind)
+LeadByExample.buff_duration = 10
+local PustuleEruption = Ability:Add(351094, true, true) -- Necrolord (Emeni Soulbind)
+local SummonSteward = Ability:Add(324739, false, true) -- Kyrian
+local SpearOfBastion = Ability:Add(307865, false, true) -- Kyrian
+SpearOfBastion.cooldown_duration = 60
+SpearOfBastion.buff_duration = 8
+SpearOfBastion.rage_gain = 25
+SpearOfBastion:AutoAoe()
+local SummonSteward = Ability:Add(324739, false, true) -- Kyrian
+SummonSteward.cooldown_duration = 300
+local VolatileSolvent = Ability:Add(323074, true, true) -- Necrolord (Plague Deviser Marileth Soulbind)
+VolatileSolvent.Humanoid = Ability:Add(323491, true, true)
+VolatileSolvent.Humanoid.buff_duration = 120
 -- Soulbind conduits
-
+local MercilessBonegrinder = Ability:Add(335260, true, true, 346574)
+MercilessBonegrinder.buff_duration = 9
+MercilessBonegrinder.conduit_id = 14
 -- Legendary effects
 
 -- PvP talents
@@ -1333,6 +1367,21 @@ function Player:UpdateAbilities()
 			end
 		end
 	end
+	
+	if Ravager.known then
+		Bladestorm.known = false
+	end
+	if ImpendingVictory.known then
+		VictoryRush.known = false
+	end
+	if Devastator.known then
+		Devastate.known = false
+	end
+	Bladestorm.damage.known = Bladestorm.known or BladestormFury.known
+	ColossusSmash.debuff.known = ColossusSmash.known or Warbreaker.known
+	Revenge.free.known = Revenge.known
+	Victorious.known = VictoryRush.known or ImpendingVictory.known
+	WhirlwindFury.buff.known = WhirlwindFury.known
 
 	wipe(abilities.bySpellId)
 	wipe(abilities.velocity)
@@ -1520,34 +1569,15 @@ function Execute:Cost()
 	return Ability.Cost(self)
 end
 
-function Rampage:Cost()
-	local cost = Ability.Cost(self)
-	if Carnage.known then
-		cost = cost - 10
-	end
-	if FrothingBerserker.known then
-		cost = cost + 10
-	end
-	return max(0, cost)
-end
-
-function Slam:Cost()
-	local cost = Ability.Cost(self)
-	if CrushingAssault.known and CrushingAssault:Up() then
-		cost = cost - 20
-	end
-	return max(0, cost)
-end
-
 function Execute:Usable()
-	if (not SuddenDeath.known or not SuddenDeath:Up()) and Target.healthPercentage >= (Massacre.known and 35 or 20) then
+	if (not SuddenDeath.known or not SuddenDeath:Up()) and Target.health.pct >= (Massacre.known and 35 or 20) then
 		return false
 	end
 	return Ability.Usable(self)
 end
 
 function ExecuteFury:Usable()
-	if (not SuddenDeathFury.known or not SuddenDeathFury:Up()) and Target.healthPercentage >= (Massacre.known and 35 or 20) then
+	if (not SuddenDeathFury.known or not SuddenDeathFury:Up()) and Target.health.pct >= (Massacre.known and 35 or 20) then
 		return false
 	end
 	return Ability.Usable(self)
@@ -1572,7 +1602,7 @@ end
 function WhirlwindFury.buff:StartDurationStack()
 	local _, i, id, duration, expires, stack
 	for i = 1, 40 do
-		_, _, stack, _, duration, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
+		_, _, stack, _, duration, expires, _, _, _, id = UnitAura(self.aura_target, i, self.aura_filter)
 		if not id then
 			return 0, 0, 0
 		end
@@ -1668,9 +1698,25 @@ APL[SPEC.ARMS].Main = function(self)
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if BattleShout:Usable() and BattleShout:Remains() < 300 then
+			return BattleShout
+		end
+		if Fleshcraft:Usable() then
+			if PustuleEruption.known or VolatileSolvent.known then
+				UseCooldown(Fleshcraft)
+			elseif Fleshcraft:Remains() < 10 then
+				UseExtra(Fleshcraft)
+			end
+		end
+		if Charge:Usable() then
+			UseExtra(Charge)
+		end
 	else
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
+		end
+		if BattleShout:Usable() and BattleShout:Remains() < 30 then
+			UseCooldown(BattleShout)
 		end
 	end
 
@@ -1678,6 +1724,15 @@ end
 
 APL[SPEC.FURY].Main = function(self)
 	if Player:TimeInCombat() == 0 then
+--[[
+actions.precombat=flask
+actions.precombat+=/food
+actions.precombat+=/augmentation
+# Snapshot raid buffed stats before combat begins and pre-potting is done.
+actions.precombat+=/snapshot_stats
+actions.precombat+=/recklessness,if=!runeforge.signet_of_tormented_kings.equipped
+actions.precombat+=/fleshcraft
+]]
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 300 and Player.group_size > 1 then
 			UseCooldown(Trinket.SoleahsSecretTechnique)
 		end
@@ -1695,12 +1750,171 @@ APL[SPEC.FURY].Main = function(self)
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if BattleShout:Usable() and BattleShout:Remains() < 300 then
+			return BattleShout
+		end
+		if Fleshcraft:Usable() then
+			if PustuleEruption.known or VolatileSolvent.known then
+				UseCooldown(Fleshcraft)
+			elseif Fleshcraft:Remains() < 10 then
+				UseExtra(Fleshcraft)
+			end
+		end
+		if Charge:Usable() then
+			UseExtra(Charge)
+		end
 	else
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
 		end
+		if BattleShout:Usable() and BattleShout:Remains() < 30 then
+			UseCooldown(BattleShout)
+		end
 	end
+--[[
+actions=auto_attack
+actions+=/charge
+actions+=/variable,name=execute_phase,value=talent.massacre&target.health.pct<35|target.health.pct<20|target.health.pct>80&covenant.venthyr
+actions+=/variable,name=unique_legendaries,value=runeforge.signet_of_tormented_kings|runeforge.sinful_surge|runeforge.elysian_might
+# This is mostly to prevent cooldowns from being accidentally used during movement.
+actions+=/run_action_list,name=movement,if=movement.distance>5
+actions+=/heroic_leap,if=(raid_event.movement.distance>25&raid_event.movement.in>45)
+actions+=/sequence,if=active_enemies=1&covenant.venthyr.enabled&runeforge.signet_of_tormented_kings.equipped,name=BT&Reck:bloodthirst:recklessness
+actions+=/sequence,if=active_enemies=1&!covenant.venthyr.enabled&runeforge.signet_of_tormented_kings.equipped,name=BT&Charge:bloodthirst:heroic_charge
+actions+=/potion
+actions+=/pummel,if=target.debuff.casting.react
+actions+=/spear_of_bastion,if=buff.enrage.up&rage<70
+actions+=/rampage,if=cooldown.recklessness.remains<3&talent.reckless_abandon.enabled
+actions+=/recklessness,if=runeforge.sinful_surge&gcd.remains=0&(variable.execute_phase|(target.time_to_pct_35>40&talent.anger_management|target.time_to_pct_35>70&!talent.anger_management))&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
+actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(cooldown.spear_of_bastion.remains<5|cooldown.spear_of_bastion.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
+actions+=/recklessness,if=!variable.unique_legendaries&gcd.remains=0&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)&(!covenant.necrolord|cooldown.conquerors_banner.remains>20)
+actions+=/recklessness,use_off_gcd=1,if=runeforge.signet_of_tormented_kings.equipped&gcd.remains&prev_gcd.1.rampage&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
+actions+=/whirlwind,if=spell_targets.whirlwind>1&!buff.meat_cleaver.up|raid_event.adds.in<gcd&!buff.meat_cleaver.up
+actions+=/use_item,name=scars_of_fraternal_strife
+actions+=/use_item,name=gavel_of_the_first_arbiter
+actions+=/blood_fury
+actions+=/berserking,if=buff.recklessness.up
+actions+=/lights_judgment,if=buff.recklessness.down&debuff.siegebreaker.down
+actions+=/fireblood
+actions+=/ancestral_call
+actions+=/bag_of_tricks,if=buff.recklessness.down&debuff.siegebreaker.down&buff.enrage.up
+actions+=/call_action_list,name=aoe
+actions+=/call_action_list,name=single_target
+]]
+	self.execute_phase = Target.health.pct < (Massacre.known and 35 or 20) or (Condemn.known and Target.health.pct > 80)
+	--self.unique_legendaries = SignetOfTormentedKings.known or SinfulSurge.known  or ElysianMight.known
+	if SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 70 then
+		UseCooldown(SpearOfBastion)
+	end
+	if Rampage:Usable() and Recklessness:Ready(3) then
+		return Rampage
+	end
+	if Recklessness:Usable() then
+		UseCooldown(Recklessness)
+	end
+	if Player.enemies > 1 and WhirlwindFury:Usable() and WhirlwindFury.buff:Down() then
+		return WhirlwindFury
+	end
+	if VictoryRush:Usable() and Player.health.pct < 85 then
+		UseExtra(VictoryRush)
+	end
+	if Player.enemies > 1 then
+		local apl = self:aoe()
+		if apl then return apl end
+	end
+	return self:single_target()
+end
 
+APL[SPEC.FURY].aoe = function(self)
+--[[
+actions.aoe=cancel_buff,name=bladestorm,if=spell_targets.whirlwind>1&gcd.remains=0&soulbind.first_strike&buff.first_strike.remains&buff.enrage.remains<gcd
+actions.aoe+=/spear_of_bastion,if=buff.enrage.up&rage<40&spell_targets.whirlwind>1
+actions.aoe+=/bladestorm,if=buff.enrage.up&spell_targets.whirlwind>2
+actions.aoe+=/siegebreaker,if=spell_targets.whirlwind>1
+actions.aoe+=/rampage,if=spell_targets.whirlwind>1
+actions.aoe+=/spear_of_bastion,if=buff.enrage.up&cooldown.recklessness.remains>5&spell_targets.whirlwind>1
+actions.aoe+=/bladestorm,if=buff.enrage.remains>gcd*2.5&spell_targets.whirlwind>1
+]]
+	if SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 40 then
+		UseCooldown(SpearOfBastion)
+	end
+	if BladestormFury:Usable() and Enrage:Up() and Player.enemies > 2 then
+		UseCooldown(BladestormFury)
+	end
+	if Siegebreaker:Usable() then
+		return Siegebreaker
+	end
+	if Rampage:Usable() then
+		return Rampage
+	end
+	if SpearOfBastion:Usable() and Enrage:Up() and not Recklessness:Ready(5) then
+		UseCooldown(SpearOfBastion)
+	end
+	if BladestormFury:Usable() and Enrage:Remains() > (Player.gcd * 2.5) then
+		UseCooldown(BladestormFury)
+	end
+end
+
+APL[SPEC.FURY].single_target = function(self)
+--[[
+actions.single_target=raging_blow,if=runeforge.will_of_the_berserker.equipped&buff.will_of_the_berserker.remains<gcd
+actions.single_target+=/crushing_blow,if=runeforge.will_of_the_berserker.equipped&buff.will_of_the_berserker.remains<gcd
+actions.single_target+=/cancel_buff,name=bladestorm,if=spell_targets.whirlwind=1&gcd.remains=0&(talent.massacre.enabled|covenant.venthyr.enabled)&variable.execute_phase&(rage>90|!cooldown.condemn.remains)
+actions.single_target+=/siegebreaker,if=spell_targets.whirlwind>1|raid_event.adds.in>15
+actions.single_target+=/rampage,if=buff.recklessness.up|(buff.enrage.remains<gcd|rage>80)|buff.frenzy.remains<1.5
+actions.single_target+=/crushing_blow,if=set_bonus.tier28_2pc|charges=2|(buff.recklessness.up&variable.execute_phase&talent.massacre.enabled)
+actions.single_target+=/execute
+actions.single_target+=/spear_of_bastion,if=runeforge.elysian_might&buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
+actions.single_target+=/bladestorm,if=buff.enrage.up&(!buff.recklessness.remains|rage<50)&(spell_targets.whirlwind=1&raid_event.adds.in>45|spell_targets.whirlwind=2)
+actions.single_target+=/spear_of_bastion,if=buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
+actions.single_target+=/raging_blow,if=set_bonus.tier28_2pc|charges=2|(buff.recklessness.up&variable.execute_phase&talent.massacre.enabled)
+actions.single_target+=/bloodthirst,if=buff.enrage.down|conduit.vicious_contempt.rank>5&target.health.pct<35
+actions.single_target+=/bloodbath,if=buff.enrage.down|conduit.vicious_contempt.rank>5&target.health.pct<35&!talent.cruelty.enabled
+actions.single_target+=/dragon_roar,if=buff.enrage.up&(spell_targets.whirlwind>1|raid_event.adds.in>15)
+actions.single_target+=/whirlwind,if=buff.merciless_bonegrinder.up&spell_targets.whirlwind>3
+actions.single_target+=/onslaught,if=buff.enrage.up
+actions.single_target+=/bloodthirst
+actions.single_target+=/bloodbath
+actions.single_target+=/raging_blow
+actions.single_target+=/crushing_blow
+actions.single_target+=/whirlwind
+]]
+	if Siegebreaker:Usable() then
+		return Siegebreaker
+	end
+	if Rampage:Usable() and (Player.rage.current > 80 or Recklessness:Up() or Frenzy:Remains() < 1.5 or Enrage:Remains() < Player.gcd) then
+		return Rampage
+	end
+	if ExecuteFury:Usable() then
+		return ExecuteFury
+	end
+	if SpearOfBastion:Usable() and Enrage:Up() and not Recklessness:Ready(5) and (Recklessness:Up() or (Target.boss and Target.timeToDie < 20) or (Siegebreaker.known and Siegebreaker:Up()) or (Target.boss and not Siegebreaker.known and Target.timeToDie > 68)) then
+		UseCooldown(SpearOfBastion)
+	end
+	if BladestormFury:Usable() and Enrage:Up() and (Recklessness:Down() or Player.rage.current < 50) and between(Player.enemies, 1, 2) then
+		UseCooldown(BladestormFury)
+	end
+	if MercilessBonegrinder.known and WhirlwindFury:Usable() and MercilessBonegrinder:Up() and Player.enemies > 3 then
+		return WhirlwindFury
+	end
+	if RagingBlow:Usable() then
+		return RagingBlow
+	end
+	if Bloodthirst:Usable() and Enrage:Down() then
+		return Bloodthirst
+	end
+	if DragonRoar:Usable() and Enrage:Up() then
+		return DragonRoar
+	end
+	if Bloodthirst:Usable() then
+		return Bloodthirst
+	end
+	if RagingBlow:Usable() then
+		return RagingBlow
+	end
+	if WhirlwindFury:Usable() then
+		return WhirlwindFury
+	end
 end
 
 APL[SPEC.PROTECTION].Main = function(self)
@@ -1722,9 +1936,25 @@ APL[SPEC.PROTECTION].Main = function(self)
 				UseCooldown(SpectralFlaskOfPower)
 			end
 		end
+		if BattleShout:Usable() and BattleShout:Remains() < 300 then
+			return BattleShout
+		end
+		if Fleshcraft:Usable() then
+			if PustuleEruption.known or VolatileSolvent.known then
+				UseCooldown(Fleshcraft)
+			elseif Fleshcraft:Remains() < 10 then
+				UseExtra(Fleshcraft)
+			end
+		end
+		if Charge:Usable() then
+			UseExtra(Charge)
+		end
 	else
 		if Trinket.SoleahsSecretTechnique:Usable() and Trinket.SoleahsSecretTechnique.buff:Remains() < 10 and Player.group_size > 1 then
 			UseExtra(Trinket.SoleahsSecretTechnique)
+		end
+		if BattleShout:Usable() and BattleShout:Remains() < 30 then
+			UseCooldown(BattleShout)
 		end
 	end
 
@@ -2190,7 +2420,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	if srcGUID ~= Player.guid then
 		return
 	end
-
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
 		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
@@ -2268,7 +2497,7 @@ end
 function events:UNIT_POWER_FREQUENT(unitId, powerType)
 	if unitId == 'player' and powerType == 'RAGE' then
 		Player.rage.current = UnitPower(unitId, 1)
-		Player.rage.max = UnitPoweMax(unitId, 1)
+		Player.rage.max = UnitPowerMax(unitId, 1)
 		Player.rage.deficit = Player.rage.max - Player.rage.current
 		UI:UpdateCombatWithin(0.05)
 	end

@@ -1788,22 +1788,21 @@ actions=auto_attack
 actions+=/charge
 actions+=/variable,name=execute_phase,value=talent.massacre&target.health.pct<35|target.health.pct<20|target.health.pct>80&covenant.venthyr
 actions+=/variable,name=unique_legendaries,value=runeforge.signet_of_tormented_kings|runeforge.sinful_surge|runeforge.elysian_might
+actions+=/variable,name=bladestorm_condition,value=(prev_gcd.1.rampage|buff.enrage.remains>gcd*2.5)&(!conduit.merciless_bonegrinder.enabled|spell_targets.whirlwind<=3|buff.merciless_bonegrinder.down)
 # This is mostly to prevent cooldowns from being accidentally used during movement.
 actions+=/run_action_list,name=movement,if=movement.distance>5
 actions+=/heroic_leap,if=(raid_event.movement.distance>25&raid_event.movement.in>45)
-actions+=/sequence,if=active_enemies=1&covenant.venthyr.enabled&runeforge.signet_of_tormented_kings.equipped,name=BT&Reck:bloodthirst:recklessness
-actions+=/sequence,if=active_enemies=1&!covenant.venthyr.enabled&runeforge.signet_of_tormented_kings.equipped,name=BT&Charge:bloodthirst:heroic_charge
 actions+=/potion
 actions+=/pummel,if=target.debuff.casting.react
+actions+=/use_item,name=enforcers_stun_grenade,if=buff.enrage.up&(!cooldown.recklessness.remains|buff.recklessness.remains>10)&(!cooldown.spear_of_bastion.remains|cooldown.spear_of_bastion.remains>50|buff.elysian_might.up)|fight_remains<25
 actions+=/spear_of_bastion,if=buff.enrage.up&rage<70
 actions+=/rampage,if=cooldown.recklessness.remains<3&talent.reckless_abandon.enabled
 actions+=/recklessness,if=runeforge.sinful_surge&gcd.remains=0&(variable.execute_phase|(target.time_to_pct_35>40&talent.anger_management|target.time_to_pct_35>70&!talent.anger_management))&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
-actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(cooldown.spear_of_bastion.remains<5|cooldown.spear_of_bastion.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
+actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(!runeforge.signet_of_tormented_kings.equipped|variable.bladestorm_condition)&(cooldown.spear_of_bastion.remains<5|cooldown.spear_of_bastion.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
 actions+=/recklessness,if=!variable.unique_legendaries&gcd.remains=0&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)&(!covenant.necrolord|cooldown.conquerors_banner.remains>20)
 actions+=/recklessness,use_off_gcd=1,if=runeforge.signet_of_tormented_kings.equipped&gcd.remains&prev_gcd.1.rampage&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
 actions+=/whirlwind,if=spell_targets.whirlwind>1&!buff.meat_cleaver.up|raid_event.adds.in<gcd&!buff.meat_cleaver.up
-actions+=/use_item,name=scars_of_fraternal_strife
-actions+=/use_item,name=gavel_of_the_first_arbiter
+actions+=/bloodthirst,if=buff.enrage.down&rage<50&(covenant.kyrian&cooldown.spear_of_bastion.remains<gcd|runeforge.signet_of_tormented_kings.equipped&cooldown.recklessness.remains<gcd)
 actions+=/blood_fury
 actions+=/berserking,if=buff.recklessness.up
 actions+=/lights_judgment,if=buff.recklessness.down&debuff.siegebreaker.down
@@ -1815,6 +1814,7 @@ actions+=/call_action_list,name=single_target
 ]]
 	self.execute_phase = Target.health.pct < (Massacre.known and 35 or 20) or (Condemn.known and Target.health.pct > 80)
 	--self.unique_legendaries = SignetOfTormentedKings.known or SinfulSurge.known  or ElysianMight.known
+	self.bladestorm_condition = (Rampage:Previous() or Enrage:Remains() > (Player.gcd * 2.5)) and (not MercilessBonegrinder.known or Player.enemies <= 3 or MercilessBonegrinder:Down())
 	if SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 70 then
 		UseCooldown(SpearOfBastion)
 	end
@@ -1823,13 +1823,16 @@ actions+=/call_action_list,name=single_target
 	end
 	if Recklessness:Usable() and (Player.enemies == 1 or WhirlwindFury.buff:Up()) and (
 		(SinfulSurge.known and (self.execute_phase or ((AngerManagement.known and Target:TimeToPct(35) > 40) or (not AngerManagement.known and Target:TimeToPct(35) > 70)))) or
-		(ElysianMight.known and (SpearOfBastion:Ready(5) or not SpearOfBastion:Ready(20))) or
+		(ElysianMight.known and (not SignetOfTormentedKings.known or self.bladestorm_condition) and (SpearOfBastion:Ready(5) or not SpearOfBastion:Ready(20))) or
 		(SignetOfTormentedKings.known and Rampage:Previous() and (Target.timeToDie > 100 or self.execute_phase or Target.timeToDie < 15))
 	) then
 		UseCooldown(Recklessness)
 	end
 	if Player.enemies > 1 and WhirlwindFury:Usable() and WhirlwindFury.buff:Down() then
 		return WhirlwindFury
+	end
+	if Bloodthirst:Usable() and Enrage:Down() and Player.rage.current < 50 and ((SpearOfBastion.known and SpearOfBastion:Ready(Player.gcd)) or (SignetOfTormentedKings.known and Recklessness:Ready(Player.gcd))) then
+		return Bloodthirst
 	end
 	if VictoryRush:Usable() and Player.health.pct < 85 then
 		UseExtra(VictoryRush)
@@ -1854,7 +1857,7 @@ actions.aoe+=/bladestorm,if=buff.enrage.remains>gcd*2.5&spell_targets.whirlwind>
 	if SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 40 then
 		UseCooldown(SpearOfBastion)
 	end
-	if BladestormFury:Usable() and Enrage:Up() and Player.enemies > 2 then
+	if BladestormFury:Usable() and self.bladestorm_condition and Player.enemies > 2 then
 		UseCooldown(BladestormFury)
 	end
 	if Siegebreaker:Usable() then
@@ -1866,7 +1869,7 @@ actions.aoe+=/bladestorm,if=buff.enrage.remains>gcd*2.5&spell_targets.whirlwind>
 	if SpearOfBastion:Usable() and Enrage:Up() and not Recklessness:Ready(5) then
 		UseCooldown(SpearOfBastion)
 	end
-	if BladestormFury:Usable() and Enrage:Remains() > (Player.gcd * 2.5) then
+	if BladestormFury:Usable() and self.bladestorm_condition then
 		UseCooldown(BladestormFury)
 	end
 end
@@ -1881,7 +1884,7 @@ actions.single_target+=/rampage,if=buff.recklessness.up|(buff.enrage.remains<gcd
 actions.single_target+=/crushing_blow,if=set_bonus.tier28_2pc|charges=2|(buff.recklessness.up&variable.execute_phase&talent.massacre.enabled)
 actions.single_target+=/execute
 actions.single_target+=/spear_of_bastion,if=runeforge.elysian_might&buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
-actions.single_target+=/bladestorm,if=buff.enrage.up&(!buff.recklessness.remains|rage<50)&(spell_targets.whirlwind=1&raid_event.adds.in>45|spell_targets.whirlwind=2)
+actions.single_target+=/bladestorm,if=variable.bladestorm_condition&(!buff.recklessness.remains|rage<50)&(spell_targets.whirlwind=1&raid_event.adds.in>45|spell_targets.whirlwind=2)
 actions.single_target+=/spear_of_bastion,if=buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
 actions.single_target+=/raging_blow,if=set_bonus.tier28_2pc|charges=2|(buff.recklessness.up&variable.execute_phase&talent.massacre.enabled)
 actions.single_target+=/bloodthirst,if=buff.enrage.down|conduit.vicious_contempt.rank>5&target.health.pct<35
@@ -1907,7 +1910,7 @@ actions.single_target+=/whirlwind
 	if SpearOfBastion:Usable() and Enrage:Up() and not Recklessness:Ready(5) and (Recklessness:Up() or (Target.boss and Target.timeToDie < 20) or (Siegebreaker.known and Siegebreaker:Up()) or (Target.boss and not Siegebreaker.known and Target.timeToDie > 68)) then
 		UseCooldown(SpearOfBastion)
 	end
-	if BladestormFury:Usable() and Enrage:Up() and (Recklessness:Down() or Player.rage.current < 50) and between(Player.enemies, 1, 2) then
+	if BladestormFury:Usable() and self.bladestorm_condition and (Recklessness:Down() or Player.rage.current < 50) and between(Player.enemies, 1, 2) then
 		UseCooldown(BladestormFury)
 	end
 	if MercilessBonegrinder.known and WhirlwindFury:Usable() and MercilessBonegrinder:Up() and Player.enemies > 3 then

@@ -959,6 +959,7 @@ local Massacre = Ability:Add(206315, false, true, 281001)
 local Ravager = Ability:Add(152277, false, true)
 Ravager.buff_duration = 7
 Ravager.cooldown_duration = 60
+local RecklessAbandon = Ability:Add(202751, false, true)
 local StormBolt = Ability:Add(107570, false, false, 132169)
 StormBolt.buff_duration = 4
 StormBolt.cooldown_duration = 30
@@ -1151,7 +1152,14 @@ local MercilessBonegrinder = Ability:Add(335260, true, true, 346574)
 MercilessBonegrinder.buff_duration = 9
 MercilessBonegrinder.conduit_id = 14
 -- Legendary effects
-
+local ElysianMight = Ability:Add(357996, true, true, 311193)
+ElysianMight.bonus_id = 7730
+local SignetOfTormentedKings = Ability:Add(335266, true, true)
+SignetOfTormentedKings.bonus_id = 6959
+local SinfulSurge = Ability:Add(354131, true, true)
+SinfulSurge.bonus_id = 7470
+local Unity = Ability:Add(364929, true, true)
+Unity.bonus_id = 8130
 -- PvP talents
 
 -- Racials
@@ -1382,6 +1390,10 @@ function Player:UpdateAbilities()
 	Revenge.free.known = Revenge.known
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
+	if Unity.known then
+		ElysianMight.known = SpearOfBastion.known
+		SinfulSurge.known = Condemn.known
+	end
 
 	wipe(abilities.bySpellId)
 	wipe(abilities.velocity)
@@ -1806,10 +1818,14 @@ actions+=/call_action_list,name=single_target
 	if SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 70 then
 		UseCooldown(SpearOfBastion)
 	end
-	if Rampage:Usable() and Recklessness:Ready(3) then
+	if RecklessAbandon.known and Rampage:Usable() and Recklessness:Ready(3) then
 		return Rampage
 	end
-	if Recklessness:Usable() then
+	if Recklessness:Usable() and (Player.enemies == 1 or WhirlwindFury.buff:Up()) and (
+		(SinfulSurge.known and (self.execute_phase or ((AngerManagement.known and Target:TimeToPct(35) > 40) or (not AngerManagement.known and Target:TimeToPct(35) > 70)))) or
+		(ElysianMight.known and (SpearOfBastion:Ready(5) or not SpearOfBastion:Ready(20))) or
+		(SignetOfTormentedKings.known and Rampage:Previous() and (Target.timeToDie > 100 or self.execute_phase or Target.timeToDie < 15))
+	) then
 		UseCooldown(Recklessness)
 	end
 	if Player.enemies > 1 and WhirlwindFury:Usable() and WhirlwindFury.buff:Down() then

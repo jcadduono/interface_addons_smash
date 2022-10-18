@@ -1798,7 +1798,7 @@ actions+=/use_item,name=enforcers_stun_grenade,if=buff.enrage.up&(!cooldown.reck
 actions+=/spear_of_bastion,if=buff.enrage.up&rage<70
 actions+=/rampage,if=cooldown.recklessness.remains<3&talent.reckless_abandon.enabled
 actions+=/recklessness,if=runeforge.sinful_surge&gcd.remains=0&(variable.execute_phase|(target.time_to_pct_35>40&talent.anger_management|target.time_to_pct_35>70&!talent.anger_management))&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
-actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(!runeforge.signet_of_tormented_kings.equipped|variable.bladestorm_condition)&(cooldown.spear_of_bastion.remains<5|cooldown.spear_of_bastion.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
+actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(!runeforge.signet_of_tormented_kings.equipped|variable.bladestorm_condition|buff.elysian_might.up&rage<70)&(cooldown.spear_of_bastion.remains<5|cooldown.spear_of_bastion.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
 actions+=/recklessness,if=!variable.unique_legendaries&gcd.remains=0&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)&(!covenant.necrolord|cooldown.conquerors_banner.remains>20)
 actions+=/recklessness,use_off_gcd=1,if=runeforge.signet_of_tormented_kings.equipped&gcd.remains&prev_gcd.1.rampage&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
 actions+=/whirlwind,if=spell_targets.whirlwind>1&!buff.meat_cleaver.up|raid_event.adds.in<gcd&!buff.meat_cleaver.up
@@ -1823,7 +1823,7 @@ actions+=/call_action_list,name=single_target
 	end
 	if Recklessness:Usable() and (Player.enemies == 1 or WhirlwindFury.buff:Up()) and (
 		(SinfulSurge.known and (self.execute_phase or ((AngerManagement.known and Target:TimeToPct(35) > 40) or (not AngerManagement.known and Target:TimeToPct(35) > 70)))) or
-		(ElysianMight.known and (not SignetOfTormentedKings.known or self.bladestorm_condition) and (SpearOfBastion:Ready(5) or not SpearOfBastion:Ready(20))) or
+		(ElysianMight.known and (not SignetOfTormentedKings.known or self.bladestorm_condition or (ElysianMight:Up() and Player.rage.current < 70)) and (SpearOfBastion:Ready(5) or not SpearOfBastion:Ready(20))) or
 		(SignetOfTormentedKings.known and Rampage:Previous() and (Target.timeToDie > 100 or self.execute_phase or Target.timeToDie < 15))
 	) then
 		UseCooldown(Recklessness)

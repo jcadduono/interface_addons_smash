@@ -1016,6 +1016,7 @@ local DeepWounds = Ability:Add(262111, false, true, 262115)
 DeepWounds.buff_duration = 12
 DeepWounds.tick_interval = 3
 DeepWounds.hasted_ticks = true
+DeepWounds:TrackAuras()
 local DieByTheSword = Ability:Add(118038, true, true)
 DieByTheSword.buff_duration = 8
 DieByTheSword.cooldown_duration = 180
@@ -2031,7 +2032,7 @@ actions.hac+=/wrecking_throw
 	if Execute:Usable() and Juggernaut:Up() and Juggernaut:Remains() < Player.gcd then
 		return Execute
 	end
-	if BloodAndThunder.known and Rend.known and ThunderClap:Usable() and Rend:Refreshable() then
+	if BloodAndThunder.known and Rend.known and ThunderClap:Usable() and (Rend:Refreshable() or Rend:Ticking() < Player.enemies) then
 		return ThunderClap
 	end
 	if SweepingStrikes:Usable() and SweepingStrikes:Down() and (not Bladestorm.known or not Bladestorm:Ready(15)) then
@@ -2048,6 +2049,9 @@ actions.hac+=/wrecking_throw
 	end
 	if ColossusSmash:Usable() then
 		UseCooldown(ColossusSmash)
+	end
+	if Cleave:Usable() and DeepWounds:Ticking() < Player.enemies then
+		return Cleave
 	end
 	if ThunderousRoar:Usable() and (
 		(TestOfMight.known and TestOfMight:Up()) or

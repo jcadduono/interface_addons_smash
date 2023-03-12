@@ -1054,7 +1054,7 @@ Cleave:AutoAoe()
 local CrushingForce = Ability:Add(382764, false, true)
 local Dreadnaught = Ability:Add(262150, false, true, 315961)
 Dreadnaught:AutoAoe()
-local ExecutionersPrecision = Ability:Add(386634, true, true, 386633)
+local ExecutionersPrecision = Ability:Add(386634, false, true, 386633)
 ExecutionersPrecision.buff_duration = 30
 local FervorOfBattle = Ability:Add(202316, false, true)
 local Hurricane = Ability:Add(390563, true, true, 390581)

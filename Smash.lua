@@ -1958,6 +1958,9 @@ actions.single_target+=/rend,if=remains<duration*0.3
 	if SuddenDeath.known and Execute:Usable() and SuddenDeath:Up() then
 		return Execute
 	end
+	if WreckingThrow:Usable() and UnitGetTotalAbsorbs('target') > Player.health.max then
+		return WreckingThrow
+	end
 	if SonicBoom.known and Shockwave:Usable() then
 		return Shockwave
 	end
@@ -1986,7 +1989,7 @@ actions.single_target+=/rend,if=remains<duration*0.3
 		return Cleave
 	end
 	if WreckingThrow:Usable() then
-		return WreckingThrow
+		UseCooldown(WreckingThrow)
 	end
 	if Rend:Usable() and Rend:Refreshable() then
 		return Rend

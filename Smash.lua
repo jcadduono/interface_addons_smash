@@ -2408,7 +2408,7 @@ actions+=/shield_block,if=buff.shield_block.duration<=18&talent.enduring_defense
 	) then
 		return UseExtra(LastStand)
 	end
-	if ShieldBlock:Usable() and (ShieldBlock:Remains() < 4 or (Player.rage.deficit <= 40 and ShieldBlock:Remains() < (EnduringDefenses.known and 18 or 12))) then
+	if ShieldBlock:Usable() and (Player.enemies > 1 or Target.timeToDie > ShieldBlock:Remains()) and (ShieldBlock:Remains() < 4 or (Player.rage.deficit <= 40 and ShieldBlock:Remains() < (EnduringDefenses.known and 18 or 12))) then
 		return UseExtra(ShieldBlock)
 	end
 end

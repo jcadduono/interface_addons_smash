@@ -1149,17 +1149,15 @@ local EnduringDefenses = Ability:Add(386027, true, true)
 local IgnorePain = Ability:Add(190456, true, true)
 IgnorePain.buff_duration = 12
 IgnorePain.cooldown_duration = 1
-IgnorePain.rage_cost = 40
+IgnorePain.rage_cost = 35
 IgnorePain.triggers_gcd = false
 local ImmovableObject = Ability:Add(394307, true, true)
 local LastStand = Ability:Add(12975, true, true)
 LastStand.buff_duration = 15
-LastStand.cooldown_duration = 120
+LastStand.cooldown_duration = 180
 LastStand.triggers_gcd = false
 local Revenge = Ability:Add(6572, false, true)
-Revenge.cooldown_duration = 3
-Revenge.rage_cost = 30
-Revenge.hasted_cooldown = true
+Revenge.rage_cost = 20
 Revenge:AutoAoe()
 Revenge.free = Ability:Add(5302, true, true)
 Revenge.free.buff_duration = 6
@@ -1177,7 +1175,8 @@ ShieldSlam.cooldown_duration = 9
 ShieldSlam.hasted_cooldown = true
 local ShieldWall = Ability:Add(871, true, true)
 ShieldWall.buff_duration = 8
-ShieldWall.cooldown_duration = 240
+ShieldWall.cooldown_duration = 180
+ShieldWall.requires_charge = true
 ShieldWall.triggers_gcd = false
 local ThunderClapProt = Ability:Add(6343, false, true)
 ThunderClapProt.buff_duration = 10
@@ -1409,6 +1408,9 @@ function Player:UpdateAbilities()
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
 	VanguardsDetermination.known = self.spec == SPEC.PROTECTION and self.set_bonus.t29 >= 2
+	if IgnorePain.known then
+		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 40) or (self.spec == SPEC.FURY and 60) or 35
+	end
 
 	wipe(abilities.bySpellId)
 	wipe(abilities.velocity)

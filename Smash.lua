@@ -365,8 +365,8 @@ Player.target_modes = {
 		{1, ''},
 		{2, '2'},
 		{3, '3'},
-		{4, '4'},
-		{5, '5+'},
+		{4, '4+'},
+		{6, '6+'},
 	},
 }
 
@@ -953,11 +953,14 @@ local Victorious = Ability:Add(32216, true, true)
 Victorious.buff_duration = 20
 ------ Talents
 local AngerManagement = Ability:Add(152278, false, true)
-local Avatar = Ability:Add(107574, true, true)
+local Avatar = Ability:Add({107574, 401150}, true, true)
 Avatar.buff_duration = 20
 Avatar.cooldown_duration = 90
 local BlademastersTorment = Ability:Add(390138, false, true)
 local BloodAndThunder = Ability:Add(384277, false, true)
+local UnstoppableForce = Ability:Add(275336, false, true)
+local DefensiveStance = Ability:Add(386208, true, true)
+DefensiveStance.cooldown_duration = 3
 local DragonRoar = Ability:Add(118000, false, true)
 DragonRoar.buff_duration = 6
 DragonRoar.cooldown_duration = 35
@@ -966,11 +969,22 @@ local ElysianMight = Ability:Add(386285, true, true, 386286)
 local ImpendingVictory = Ability:Add(202168, false, true)
 ImpendingVictory.cooldown_duration = 30
 ImpendingVictory.rage_cost = 10
+local Intercept = Ability:Add(198304, false, true)
+Intercept.cooldown_duration = 15
+Intercept.requires_charge = true
+Intercept.triggers_gcd = false
 local Massacre = Ability:Add(206315, false, true, 281001)
-local Ravager = Ability:Add(152277, false, true)
-Ravager.buff_duration = 7
+local Ravager = Ability:Add({152277, 228920}, false, true)
+Ravager.buff_duration = 12
 Ravager.cooldown_duration = 60
+Ravager.hasted_duration = true
+Ravager.hasted_ticks = true
 local RecklessAbandon = Ability:Add(202751, false, true)
+local SeismicReverbation = Ability:Add(382956, true, true)
+local Shockwave = Ability:Add(46968, false, true, 132168)
+Shockwave.buff_duration = 2
+Shockwave.cooldown_duration = 40
+Shockwave:AutoAoe()
 local Sidearm = Ability:Add(384404, false, true, 384391)
 Sidearm:AutoAoe()
 local SonicBoom = Ability:Add(390725, true, true)
@@ -1123,19 +1137,21 @@ Enrage.buff_duration = 4
 local Frenzy = Ability:Add(335077, true, true, 335082)
 Frenzy.buff_duration = 12
 ---- Protection
+------ Talents
+local Bolster = Ability:Add(280001, true, true)
+local BoomingVoice = Ability:Add(202743, false, true)
 local DemoralizingShout = Ability:Add(1160, false, true)
 DemoralizingShout.buff_duration = 8
 DemoralizingShout.cooldown_duration = 45
 local Devastate = Ability:Add(20243, false, true)
+local Devastator = Ability:Add(236279, false, true)
+local EnduringDefenses = Ability:Add(386027, true, true)
 local IgnorePain = Ability:Add(190456, true, true)
 IgnorePain.buff_duration = 12
 IgnorePain.cooldown_duration = 1
 IgnorePain.rage_cost = 40
 IgnorePain.triggers_gcd = false
-local Intercept = Ability:Add(198304, false, true)
-Intercept.cooldown_duration = 15
-Intercept.requires_charge = true
-Intercept.triggers_gcd = false
+local ImmovableObject = Ability:Add(394307, true, true)
 local LastStand = Ability:Add(12975, true, true)
 LastStand.buff_duration = 15
 LastStand.cooldown_duration = 120
@@ -1154,6 +1170,8 @@ ShieldBlock.rage_cost = 30
 ShieldBlock.hasted_cooldown = true
 ShieldBlock.requires_charge = true
 ShieldBlock.triggers_gcd = false
+local ShieldCharge = Ability:Add(385952, false, true)
+ShieldCharge.cooldown_duration = 45
 local ShieldSlam = Ability:Add(23922, false, true)
 ShieldSlam.cooldown_duration = 9
 ShieldSlam.hasted_cooldown = true
@@ -1161,21 +1179,19 @@ local ShieldWall = Ability:Add(871, true, true)
 ShieldWall.buff_duration = 8
 ShieldWall.cooldown_duration = 240
 ShieldWall.triggers_gcd = false
-local Shockwave = Ability:Add(46968, false, true, 132168)
-Shockwave.buff_duration = 2
-Shockwave.cooldown_duration = 40
-Shockwave:AutoAoe()
 local ThunderClapProt = Ability:Add(6343, false, true)
 ThunderClapProt.buff_duration = 10
 ThunderClapProt.cooldown_duration = 6
 ThunderClapProt.hasted_cooldown = true
 ThunderClapProt:AutoAoe(true)
------- Talents
-local BoomingVoice = Ability:Add(202743, false, true)
-local Devastator = Ability:Add(236279, false, true)
-local UnstoppableForce = Ability:Add(275336, false, true)
+local UnnervingFocus = Ability:Add(337154, true, true)
 ------ Procs
-
+local SeeingRed = Ability:Add(386486, true, true)
+SeeingRed.buff_duration = 30
+local VanguardsDetermination = Ability:Add(394056, true, true)
+VanguardsDetermination.buff_duration = 5
+local ViolentOutburst = Ability:Add(386477, true, true, 386478)
+ViolentOutburst.buff_duration = 30
 -- Racials
 
 -- PvP talents
@@ -1392,6 +1408,7 @@ function Player:UpdateAbilities()
 	Revenge.free.known = Revenge.known
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
+	VanguardsDetermination.known = self.spec == SPEC.PROTECTION and self.set_bonus.t29 >= 2
 
 	wipe(abilities.bySpellId)
 	wipe(abilities.velocity)
@@ -2146,12 +2163,18 @@ actions.precombat+=/fleshcraft
 		if BattleShout:Usable() and BattleShout:Remains() < 300 then
 			return BattleShout
 		end
+		if BattleStance:Down() then
+			UseExtra(BattleStance)
+		end
 		if Charge:Usable() then
 			UseExtra(Charge)
 		end
 	else
 		if BattleShout:Usable() and BattleShout:Remains() < 30 then
 			UseCooldown(BattleShout)
+		end
+		if BattleStance:Down() then
+			UseExtra(BattleStance)
 		end
 	end
 --[[
@@ -2317,6 +2340,9 @@ APL[SPEC.PROTECTION].Main = function(self)
 		if BattleShout:Usable() and BattleShout:Remains() < 300 then
 			return BattleShout
 		end
+		if BattleStance:Down() and DefensiveStance:Down() then
+			UseExtra(BattleStance)
+		end
 		if Charge:Usable() then
 			UseExtra(Charge)
 		end
@@ -2324,8 +2350,184 @@ APL[SPEC.PROTECTION].Main = function(self)
 		if BattleShout:Usable() and BattleShout:Remains() < 30 then
 			UseCooldown(BattleShout)
 		end
+		if BattleStance:Down() and DefensiveStance:Down() then
+			UseExtra(BattleStance)
+		end
 	end
+--[[
+actions=auto_attack
+actions+=/charge,if=time=0
+actions+=/use_items
+actions+=/potion,if=buff.avatar.up|buff.avatar.up&target.health.pct<=20
+actions+=/run_action_list,name=aoe,if=spell_targets.thunder_clap>=3
+actions+=/call_action_list,name=generic
+]]
+	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar:Up())
+	if Player:UnderAttack() then
+		self:defensives()
+	end
+	if Player.health.pct < Opt.victory_threshold then
+		if VictoryRush:Usable() then
+			UseExtra(VictoryRush)
+		elseif ImpendingVictory:Usable() then
+			UseExtra(ImpendingVictory)
+		end
+	end
+	if self.use_cds then
+		self:cds()
+	end
+	if Player.enemies >= 3 then
+		local apl = self:aoe()
+		if apl then return apl end
+	end
+	return self:generic()
+end
 
+APL[SPEC.PROTECTION].defensives = function(self)
+--[[
+actions+=/shield_wall,if=talent.immovable_object.enabled&buff.avatar.down
+actions+=/ignore_pain,if=target.health.pct>=20&(rage.deficit<=15&cooldown.shield_slam.ready|rage.deficit<=40&cooldown.shield_charge.ready&talent.champions_bulwark.enabled|rage.deficit<=20&cooldown.shield_charge.ready|rage.deficit<=30&cooldown.demoralizing_shout.ready&talent.booming_voice.enabled|rage.deficit<=20&cooldown.avatar.ready|rage.deficit<=45&cooldown.demoralizing_shout.ready&talent.booming_voice.enabled&buff.last_stand.up&talent.unnerving_focus.enabled|rage.deficit<=30&cooldown.avatar.ready&buff.last_stand.up&talent.unnerving_focus.enabled|rage.deficit<=20|rage.deficit<=40&cooldown.shield_slam.ready&buff.violent_outburst.up&talent.heavy_repercussions.enabled&talent.impenetrable_wall.enabled|rage.deficit<=55&cooldown.shield_slam.ready&buff.violent_outburst.up&buff.last_stand.up&talent.unnerving_focus.enabled&talent.heavy_repercussions.enabled&talent.impenetrable_wall.enabled|rage.deficit<=17&cooldown.shield_slam.ready&talent.heavy_repercussions.enabled|rage.deficit<=18&cooldown.shield_slam.ready&talent.impenetrable_wall.enabled),use_off_gcd=1
+actions+=/last_stand,if=(target.health.pct>=90&talent.unnerving_focus.enabled|target.health.pct<=20&talent.unnerving_focus.enabled)|talent.bolster.enabled
+actions+=/shield_block,if=buff.shield_block.duration<=18&talent.enduring_defenses.enabled|buff.shield_block.duration<=12
+]]
+	if self.use_cds and ShieldWall:Usable() and ImmovableObject.known and Avatar:Down() then
+		return UseExtra(ShieldWall)
+	end
+	if ShieldBlock:Usable() and ShieldBlock:Remains() < 2 then
+		return UseExtra(ShieldBlock)
+	end
+	if IgnorePain:Usable() and (Player.rage.deficit <= 30 or (Player.rage.deficit <= 55 and IgnorePain:Remains() < 2)) then
+		return UseExtra(IgnorePain)
+	end
+	if self.use_cds and LastStand:Usable() and (
+		Player.health.pct < 20 or
+		Bolster.known or
+		(UnnervingFocus.known and (Target.health.pct >= 90 or Target.health.pct <= 20))
+	) then
+		return UseExtra(LastStand)
+	end
+	if ShieldBlock:Usable() and (ShieldBlock:Remains() < 4 or (Player.rage.deficit <= 40 and ShieldBlock:Remains() < (EnduringDefenses.known and 18 or 12))) then
+		return UseExtra(ShieldBlock)
+	end
+end
+
+APL[SPEC.PROTECTION].cds = function(self)
+--[[
+actions+=/avatar
+actions+=/ravager
+actions+=/demoralizing_shout,if=talent.booming_voice.enabled
+actions+=/spear_of_bastion
+actions+=/thunderous_roar
+actions+=/shockwave,if=talent.sonic_boom.enabled&buff.avatar.up&talent.unstoppable_force.enabled&!talent.rumbling_earth.enabled
+actions+=/shield_charge
+]]
+	if Avatar:Usable() then
+		return UseCooldown(Avatar)
+	end
+	if Ravager:Usable() then
+		return UseCooldown(Ravager)
+	end
+	if BoomingVoice.known and DemoralizingShout:Usable() then
+		return UseCooldown(DemoralizingShout)
+	end
+	if SpearOfBastion:Usable() then
+		return UseCooldown(SpearOfBastion)
+	end
+	if ThunderousRoar:Usable() then
+		return UseCooldown(ThunderousRoar)
+	end
+	if SonicBoom.known and Shockwave:Usable() and Avatar:Up() and UnstoppableForce.known and not RumblingEarth.known then
+		return UseCooldown(Shockwave)
+	end
+	if ShieldCharge:Usable() then
+		return UseCooldown(ShieldCharge)
+	end
+end
+
+APL[SPEC.PROTECTION].aoe = function(self)
+--[[
+actions.aoe=thunder_clap,if=dot.rend.remains<=1
+actions.aoe+=/thunder_clap,if=buff.violent_outburst.up&spell_targets.thunderclap>5&buff.avatar.up&talent.unstoppable_force.enabled
+actions.aoe+=/revenge,if=rage>=70&talent.seismic_reverberation.enabled&spell_targets.revenge>=3
+actions.aoe+=/shield_slam,if=rage<=60|buff.violent_outburst.up&spell_targets.thunderclap<=4
+actions.aoe+=/thunder_clap
+actions.aoe+=/revenge,if=rage>=30|rage>=40&talent.barbaric_training.enabled
+]]
+	if ThunderClapProt:Usable() and Rend:Remains() < 1 then
+		return ThunderClapProt
+	end
+	if UnstoppableForce.known and ThunderClapProt:Usable() and ViolentOutburst:Up() and Player.enemies > 5 then
+		return ThunderClapProt
+	end
+	if SeismicReverbation.known and Revenge:Usable() and Player.rage.current >= 70 and Player.enemies >= 3 then
+		return Revenge
+	end
+	if ShieldSlam:Usable() and (Player.rage.current <= 60 or (ViolentOutburst:Up() and Player.enemies <= 4)) then
+		return ShieldSlam
+	end
+	if ThunderClapProt:Usable() then
+		return ThunderClapProt
+	end
+	if Revenge:Usable() and Player.rage.current >= 30 then
+		return Revenge
+	end
+end
+
+APL[SPEC.PROTECTION].generic = function(self)
+--[[
+actions.generic=shield_slam
+actions.generic+=/thunder_clap,if=dot.rend.remains<=1&buff.violent_outburst.down
+actions.generic+=/execute,if=buff.sudden_death.up&talent.sudden_death.enabled
+actions.generic+=/execute,if=spell_targets.revenge=1&(talent.massacre.enabled|talent.juggernaut.enabled)&rage>=50
+actions.generic+=/revenge,if=buff.vanguards_determination.down&rage>=40
+actions.generic+=/execute,if=spell_targets.revenge=1&rage>=50
+actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>1|cooldown.shield_slam.remains&!buff.violent_outburst.up)
+actions.generic+=/revenge,if=(rage>=60&target.health.pct>20|buff.revenge.up&target.health.pct<=20&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>20)|(rage>=60&target.health.pct>35|buff.revenge.up&target.health.pct<=35&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>35)&talent.massacre.enabled
+actions.generic+=/execute,if=spell_targets.revenge=1
+actions.generic+=/revenge
+actions.generic+=/thunder_clap
+actions.generic+=/devastate
+]]
+	if ShieldSlam:Usable() then
+		return ShieldSlam
+	end
+	if ThunderClapProt:Usable() and Rend:Remains() < 1 and ViolentOutburst:Down() then
+		return ThunderClapProt
+	end
+	if SuddenDeath.known and Execute:Usable() and SuddenDeath:Up() then
+		return Execute
+	end
+	if Execute:Usable() and Player.enemies == 1 and (Massacre.known or Juggernaut.known) and Player.rage.current >= 50 then
+		return Execute
+	end
+	if Revenge:Usable() and VanguardsDetermination:Down() and Player.rage.current >= 40 then
+		return Revenge
+	end
+	if Execute:Usable() and Player.enemies == 1 and Player.rage.current >= 50 then
+		return Execute
+	end
+	if ThunderClapProt:Usable() and (Player.enemies > 1 or (not ShieldSlam:Ready() and ViolentOutburst:Down())) then
+		return ThunderClapProt
+	end
+	self.execute_pct = Massacre.known and 35 or 20
+	if Revenge:Usable() and (
+		(Target.health.pct > self.execute_pct and (Player.rage.current >= 60 or Revenge.free:Up())) or
+		(Target.health.pct <= self.execute_pct and Revenge.free:Up() and Player.rage.current <= 18 and not ShieldSlam:Ready())
+	) then
+		return Revenge
+	end
+	if Execute:Usable() and Player.enemies == 1 then
+		return Execute
+	end
+	if Revenge:Usable() then
+		return Revenge
+	end
+	if ThunderClapProt:Usable() then
+		return ThunderClapProt
+	end
+	if Devastate:Usable() then
+		return Devastate
+	end
 end
 
 APL.Interrupt = function(self)

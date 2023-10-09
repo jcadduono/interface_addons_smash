@@ -1271,6 +1271,9 @@ local VanguardsDetermination = Ability:Add(394056, true, true)
 VanguardsDetermination.buff_duration = 5
 local ViolentOutburst = Ability:Add(386477, true, true, 386478)
 ViolentOutburst.buff_duration = 30
+-- Tier set bonuses
+local CrushingAdvance = Ability:Add(410138, true, true) -- T30 4pc
+CrushingAdvance.buff_duration = 30
 -- Racials
 
 -- PvP talents
@@ -1518,6 +1521,7 @@ function Player:UpdateKnown()
 	Revenge.free.known = Revenge.known
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
+	CrushingAdvance.known = self.spec == SPEC.ARMS and self.set_bonus.t30 >= 4
 	VanguardsDetermination.known = self.spec == SPEC.PROTECTION and self.set_bonus.t29 >= 2
 	if IgnorePain.known then
 		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 40) or (self.spec == SPEC.FURY and 60) or 35
@@ -2003,6 +2007,10 @@ actions+=/run_action_list,name=single_target,if=!raid_event.adds.exists
 	return self:single_target()
 end
 
+APL[SPEC.ARMS].precombat_variables = function(self)
+	self.colossus = (Warbreaker.known and Warbreaker) or ColossusSmash
+end
+
 APL[SPEC.ARMS].execute = function(self)
 --[[
 actions.execute=sweeping_strikes,if=spell_targets.whirlwind>1
@@ -2024,20 +2032,14 @@ actions.execute+=/bladestorm
 	if Player.enemies > 1 and SweepingStrikes:Usable() and SweepingStrikes:Down() then
 		UseCooldown(SweepingStrikes)
 	end
-	if Rend:Usable() and Rend:Remains() < Player.gcd and Target.timeToDie > 12 and (
-		(not Warbreaker.known and ColossusSmash:Ready(4)) or
-		(Warbreaker.known and Warbreaker:Ready(4))
-	) then
+	if Rend:Usable() and Rend:Remains() < Player.gcd and Target.timeToDie > 12 and self.colossus:Ready(4) then
 		return Rend
 	end
-	if self.use_cds and Avatar:Usable() and (ColossusSmash:Ready() or ColossusSmash.debuff:Up() or (Target.boss and Target.timeToDie < 20)) then
+	if self.use_cds and Avatar:Usable() and (self.colossus:Ready() or ColossusSmash.debuff:Up() or (Target.boss and Target.timeToDie < 20)) then
 		UseCooldown(Avatar)
 	end
-	if Warbreaker:Usable() then
-		UseCooldown(Warbreaker)
-	end
-	if ColossusSmash:Usable() then
-		UseCooldown(ColossusSmash)
+	if self.colossus:Usable() then
+		UseCooldown(self.colossus)
 	end
 	if ThunderousRoar:Usable() and (
 		(TestOfMight.known and TestOfMight:Up()) or
@@ -2110,24 +2112,21 @@ actions.single_target+=/rend,if=remains<duration*0.3
 	end
 	if Rend:Usable() and (
 		(Rend:Remains() < Player.gcd) or
-		(TideOfBlood.known and Skullsplitter:Ready(Player.gcd) and (ColossusSmash:Ready(Player.gcd) or ColossusSmash.debuff:Up()) and Rend:Remains() < (Rend:Duration() * 0.85))
+		(TideOfBlood.known and Skullsplitter:Ready(Player.gcd) and (self.colossus:Ready(Player.gcd) or ColossusSmash.debuff:Up()) and Rend:Remains() < (Rend:Duration() * 0.85))
 	) then
 		return Rend
 	end
 	if self.use_cds and Avatar:Usable() and (
-		(WarlordsTorment.known and Player.rage.pct < 33 and (ColossusSmash:Ready() or ColossusSmash.debuff:Up() or TestOfMight:Up())) or
-		(not WarlordsTorment.known and (ColossusSmash:Ready() or ColossusSmash.debuff:Up()))
+		(WarlordsTorment.known and Player.rage.pct < 33 and (self.colossus:Ready() or ColossusSmash.debuff:Up() or TestOfMight:Up())) or
+		(not WarlordsTorment.known and (self.colossus:Ready() or ColossusSmash.debuff:Up()))
 	) then
 		UseCooldown(Avatar)
 	end
-	if self.use_cds and SpearOfBastion:Usable() and ((ColossusSmash.known and ColossusSmash:Ready(Player.gcd)) or (Warbreaker.known and Warbreaker:Ready(Player.gcd))) then
+	if self.use_cds and SpearOfBastion:Usable() and (not self.colossus.known or self.colossus:Ready(Player.gcd)) then
 		UseCooldown(SpearOfBastion)
 	end
-	if Warbreaker:Usable() then
-		UseCooldown(Warbreaker)
-	end
-	if ColossusSmash:Usable() then
-		UseCooldown(ColossusSmash)
+	if self.colossus:Usable() then
+		UseCooldown(self.colossus)
 	end
 	if ThunderousRoar:Usable() and (
 		(TestOfMight.known and (TestOfMight:Up() or (ColossusSmash.debuff:Up() and Player.rage.pct < 33))) or
@@ -2140,7 +2139,11 @@ actions.single_target+=/rend,if=remains<duration*0.3
 	end
 	if Skullsplitter:Usable() and (
 		Player.rage.current < 30 or
-		(TideOfBlood.known and Rend:Up() and (ColossusSmash.debuff:Up() or (TestOfMight.known and not ColossusSmash:Ready(Player.gcd * 4) and TestOfMight:Up()) or (not TestOfMight.known and not ColossusSmash:Ready(Player.gcd * 4))))
+		(TideOfBlood.known and Rend:Up() and (
+			ColossusSmash.debuff:Up() or
+			(TestOfMight.known and not self.colossus:Ready(Player.gcd * 4) and TestOfMight:Up()) or
+			(not TestOfMight.known and not self.colossus:Ready(Player.gcd * 4)))
+		)
 	) then
 		return Skullsplitter
 	end
@@ -2202,6 +2205,7 @@ actions.hac+=/bladestorm,if=active_enemies>1&(buff.test_of_might.up|!talent.test
 actions.hac+=/cleave,if=active_enemies>2|!talent.battlelord&buff.merciless_bonegrinder.up&cooldown.mortal_strike.remains>gcd
 actions.hac+=/whirlwind,if=active_enemies>2|talent.storm_of_swords&(buff.merciless_bonegrinder.up|buff.hurricane.up)
 actions.hac+=/skullsplitter,if=rage<40|talent.tide_of_blood&dot.rend.remains&(buff.sweeping_strikes.up&active_enemies>=2|debuff.colossus_smash.up|buff.test_of_might.up)
+actions.hac+=/mortal_strike,if=buff.sweeping_strikes.up&buff.crushing_advance.stack=3,if=set_bonus.tier30_4pc
 actions.hac+=/overpower,if=buff.sweeping_strikes.up&talent.dreadnaught
 actions.hac+=/mortal_strike,cycle_targets=1,if=debuff.executioners_precision.stack=2|dot.deep_wounds.remains<=gcd|talent.dreadnaught&talent.battlelord&active_enemies<=2
 actions.hac+=/execute,cycle_targets=1,if=buff.sudden_death.react|active_enemies<=2&(target.health.pct<20|talent.massacre&target.health.pct<35)|buff.sweeping_strikes.up
@@ -2230,17 +2234,14 @@ actions.hac+=/wrecking_throw
 	if SweepingStrikes:Usable() and SweepingStrikes:Down() and (not Bladestorm.known or not Bladestorm:Ready(15)) then
 		UseCooldown(SweepingStrikes)
 	end
-	if TideOfBlood.known and Rend:Usable() and Skullsplitter:Ready(Player.gcd) and (ColossusSmash:Ready(Player.gcd) or ColossusSmash.debuff:Up()) and Rend:Remains() < Rend:Duration() * 0.85 then
+	if TideOfBlood.known and Rend:Usable() and Skullsplitter:Ready(Player.gcd) and (self.colossus:Ready(Player.gcd) or ColossusSmash.debuff:Up()) and Rend:Remains() < Rend:Duration() * 0.85 then
 		return Rend
 	end
-	if self.use_cds and Avatar:Usable() and (BlademastersTorment.known or (Target.boss and Target.timeToDie < 20)) then
+	if self.use_cds and Avatar:Usable() then
 		UseCooldown(Avatar)
 	end
-	if Warbreaker:Usable() then
-		UseCooldown(Warbreaker)
-	end
-	if ColossusSmash:Usable() then
-		UseCooldown(ColossusSmash)
+	if self.colossus:Usable() then
+		UseCooldown(self.colossus)
 	end
 	if Cleave:Usable() and DeepWounds:Ticking() < Player.enemies then
 		return Cleave
@@ -2276,6 +2277,9 @@ actions.hac+=/wrecking_throw
 		(TideOfBlood.known and Rend:Up() and (SweepingStrikes:Up() or ColossusSmash.debuff:Up() or (TestOfMight.known and TestOfMight:Up())))
 	) then
 		return Skullsplitter
+	end
+	if CrushingAdvance.known and MortalStrike:Usable() and SweepingStrikes:Up() and CrushingAdvance:Stack() >= 3 then
+		return MortalStrike
 	end
 	if Dreadnaught.known and Overpower:Usable() and SweepingStrikes:Up() then
 		return Overpower

@@ -1053,7 +1053,7 @@ local Intercept = Ability:Add(198304, false, true)
 Intercept.cooldown_duration = 15
 Intercept.requires_charge = true
 Intercept.triggers_gcd = false
-local Massacre = Ability:Add(206315, false, true, 281001)
+local Massacre = Ability:Add({206315, 281001}, false, true)
 local Ravager = Ability:Add({152277, 228920}, false, true)
 Ravager.buff_duration = 12
 Ravager.cooldown_duration = 60
@@ -2204,7 +2204,7 @@ actions.hac+=/bladestorm,if=talent.unhinged&(buff.test_of_might.up|!talent.test_
 actions.hac+=/bladestorm,if=active_enemies>1&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)&raid_event.adds.in>30|active_enemies>1&dot.deep_wounds.remains
 actions.hac+=/cleave,if=active_enemies>2|!talent.battlelord&buff.merciless_bonegrinder.up&cooldown.mortal_strike.remains>gcd
 actions.hac+=/whirlwind,if=active_enemies>2|talent.storm_of_swords&(buff.merciless_bonegrinder.up|buff.hurricane.up)
-actions.hac+=/skullsplitter,if=rage<40|talent.tide_of_blood&dot.rend.remains&(buff.sweeping_strikes.up&active_enemies>=2|debuff.colossus_smash.up|buff.test_of_might.up)
+actions.hac+=/skullsplitter,if=rage<40&(!talent.tide_of_blood|dot.rend.remains&dot.deep_wounds.remains)|talent.tide_of_blood&dot.rend.remains&(buff.sweeping_strikes.up&active_enemies>=2|debuff.colossus_smash.up|buff.test_of_might.up)
 actions.hac+=/mortal_strike,if=buff.sweeping_strikes.up&buff.crushing_advance.stack=3,if=set_bonus.tier30_4pc
 actions.hac+=/overpower,if=buff.sweeping_strikes.up&talent.dreadnaught
 actions.hac+=/mortal_strike,cycle_targets=1,if=debuff.executioners_precision.stack=2|dot.deep_wounds.remains<=gcd|talent.dreadnaught&talent.battlelord&active_enemies<=2
@@ -2273,7 +2273,7 @@ actions.hac+=/wrecking_throw
 		return Whirlwind
 	end
 	if Skullsplitter:Usable() and (
-		Player.rage.current < 40 or
+		(Player.rage.current < 40 and (not TideOfBlood.known or (Rend:Up() and DeepWounds:Up()))) or
 		(TideOfBlood.known and Rend:Up() and (SweepingStrikes:Up() or ColossusSmash.debuff:Up() or (TestOfMight.known and TestOfMight:Up())))
 	) then
 		return Skullsplitter

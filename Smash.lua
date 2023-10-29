@@ -1274,6 +1274,9 @@ ViolentOutburst.buff_duration = 30
 -- Tier set bonuses
 local CrushingAdvance = Ability:Add(410138, true, true) -- T30 4pc
 CrushingAdvance.buff_duration = 30
+local EarthenTenacity = Ability:Add(410218, true, true) -- T30 4pc
+EarthenTenacity.buff_duration = 20
+
 -- Racials
 
 -- PvP talents
@@ -1522,6 +1525,7 @@ function Player:UpdateKnown()
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
 	CrushingAdvance.known = self.spec == SPEC.ARMS and self.set_bonus.t30 >= 4
+	EarthenTenacity.known = self.spec == SPEC.PROTECTION and self.set_bonus.t30 >= 4
 	VanguardsDetermination.known = self.spec == SPEC.PROTECTION and self.set_bonus.t29 >= 2
 	if IgnorePain.known then
 		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 40) or (self.spec == SPEC.FURY and 60) or 35
@@ -2578,6 +2582,7 @@ actions+=/shield_block,if=buff.shield_block.duration<=18&talent.enduring_defense
 	if self.use_cds and LastStand:Usable() and (
 		Player.health.pct < 20 or
 		Bolster.known or
+		EarthenTenacity.known or
 		(UnnervingFocus.known and (Target.health.pct >= 90 or Target.health.pct <= 20))
 	) then
 		return UseExtra(LastStand)
@@ -2623,22 +2628,26 @@ end
 APL[SPEC.PROTECTION].aoe = function(self)
 --[[
 actions.aoe=thunder_clap,if=dot.rend.remains<=1
+actions.aoe+=/shield_slam,if=(set_bonus.tier30_2pc|set_bonus.tier30_4pc)&spell_targets.thunder_clap<=7|buff.earthen_tenacity.up
 actions.aoe+=/thunder_clap,if=buff.violent_outburst.up&spell_targets.thunderclap>5&buff.avatar.up&talent.unstoppable_force.enabled
 actions.aoe+=/revenge,if=rage>=70&talent.seismic_reverberation.enabled&spell_targets.revenge>=3
-actions.aoe+=/shield_slam,if=rage<=60|buff.violent_outburst.up&spell_targets.thunderclap<=4
+actions.aoe+=/shield_slam,if=rage<=60|buff.violent_outburst.up&spell_targets.thunderclap<=7
 actions.aoe+=/thunder_clap
 actions.aoe+=/revenge,if=rage>=30|rage>=40&talent.barbaric_training.enabled
 ]]
 	if ThunderClapProt:Usable() and Rend:Remains() < 1 then
 		return ThunderClapProt
 	end
-	if UnstoppableForce.known and ThunderClapProt:Usable() and ViolentOutburst:Up() and Player.enemies > 5 then
+	if ShieldSlam:Usable() and ((Player.set_bonus.t30 >= 2 and Player.enemies <= 7) or EarthenTenacity:Up()) then
+		return ShieldSlam
+	end
+	if UnstoppableForce.known and ThunderClapProt:Usable() and Player.enemies > 5 and ViolentOutburst:Up() and Avatar:Up() then
 		return ThunderClapProt
 	end
 	if SeismicReverbation.known and Revenge:Usable() and Player.rage.current >= 70 and Player.enemies >= 3 then
 		return Revenge
 	end
-	if ShieldSlam:Usable() and (Player.rage.current <= 60 or (ViolentOutburst:Up() and Player.enemies <= 4)) then
+	if ShieldSlam:Usable() and (Player.rage.current <= 60 or (ViolentOutburst:Up() and Player.enemies <= 7)) then
 		return ShieldSlam
 	end
 	if ThunderClapProt:Usable() then
@@ -2654,14 +2663,12 @@ APL[SPEC.PROTECTION].generic = function(self)
 actions.generic=shield_slam
 actions.generic+=/thunder_clap,if=dot.rend.remains<=1&buff.violent_outburst.down
 actions.generic+=/execute,if=buff.sudden_death.up&talent.sudden_death.enabled
-actions.generic+=/execute,if=spell_targets.revenge=1&(talent.massacre.enabled|talent.juggernaut.enabled)&rage>=50
-actions.generic+=/revenge,if=buff.vanguards_determination.down&rage>=40
 actions.generic+=/execute,if=spell_targets.revenge=1&rage>=50
 actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>1|cooldown.shield_slam.remains&!buff.violent_outburst.up)
 actions.generic+=/revenge,if=(rage>=60&target.health.pct>20|buff.revenge.up&target.health.pct<=20&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>20)|(rage>=60&target.health.pct>35|buff.revenge.up&target.health.pct<=35&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>35)&talent.massacre.enabled
 actions.generic+=/execute,if=spell_targets.revenge=1
 actions.generic+=/revenge
-actions.generic+=/thunder_clap
+actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>=1|cooldown.shield_slam.remains&buff.violent_outburst.up)
 actions.generic+=/devastate
 ]]
 	if ShieldSlam:Usable() then

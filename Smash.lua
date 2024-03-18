@@ -1084,11 +1084,11 @@ local SonicBoom = Ability:Add(390725, true, true)
 local StormBolt = Ability:Add(107570, false, false, 132169)
 StormBolt.buff_duration = 4
 StormBolt.cooldown_duration = 30
-local SpearOfBastion = Ability:Add(376079, false, true)
-SpearOfBastion.cooldown_duration = 90
-SpearOfBastion.buff_duration = 4
-SpearOfBastion.rage_gain = 20
-SpearOfBastion:AutoAoe()
+local ChampionsSpear = Ability:Add(376079, false, true)
+ChampionsSpear.cooldown_duration = 90
+ChampionsSpear.buff_duration = 4
+ChampionsSpear.rage_gain = 20
+ChampionsSpear:AutoAoe()
 local ThunderClap = Ability:Add(396719, false, true)
 ThunderClap.buff_duration = 10
 ThunderClap.cooldown_duration = 6
@@ -1138,7 +1138,7 @@ Overpower.buff_duration = 15
 Overpower.cooldown_duration = 12
 Overpower.requires_charge = true
 local Slam = Ability:Add(1464, false, true)
-Slam.rage_cost = 20
+Slam.rage_cost = 30
 local SweepingStrikes = Ability:Add(260708, true, true)
 SweepingStrikes.buff_duration = 12
 SweepingStrikes.cooldown_duration = 30
@@ -1158,6 +1158,8 @@ Cleave.rage_cost = 20
 Cleave.cooldown_duration = 9
 Cleave.hasted_cooldown = true
 Cleave:AutoAoe()
+local CollateralDamage = Ability:Add(334779, true, true, 334783)
+CollateralDamage.buff_duration = 30
 local CrushingForce = Ability:Add(382764, false, true)
 local Dreadnaught = Ability:Add(262150, false, true, 315961)
 Dreadnaught:AutoAoe()
@@ -1166,6 +1168,7 @@ ExecutionersPrecision.buff_duration = 30
 local FervorOfBattle = Ability:Add(202316, false, true)
 local Hurricane = Ability:Add(390563, true, true, 390581)
 Hurricane.buff_duration = 6
+local ImprovedSweepingStrikes = Ability:Add(383155, true, true)
 local Juggernaut = Ability:Add(383292, true, true, 383290)
 Juggernaut.buff_duration = 12
 local MartialProwess = Ability:Add(316440, true, true)
@@ -1177,6 +1180,7 @@ Rend.buff_duration = 15
 Rend.tick_interval = 3
 Rend.hasted_ticks = true
 Rend:TrackAuras()
+local SharpenedBlades = Ability:Add(383341, false, true)
 local Skullsplitter = Ability:Add(260643, false, true)
 Skullsplitter.cooldown_duration = 21
 Skullsplitter.hasted_cooldown = true
@@ -1936,6 +1940,14 @@ function SweepingStrikes:CastSuccess(...)
 	end
 end
 
+function MartialProwess:Remains()
+	return Overpower:Remains()
+end
+
+function MartialProwess:Stack()
+	return Overpower:Stack()
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -2020,8 +2032,14 @@ actions+=/run_action_list,name=single_target,if=!raid_event.adds.exists
 			UseExtra(ImpendingVictory)
 		end
 	end
+	if IgnorePain:Usable() and (
+		Player.rage.deficit < 15 or
+		(Bladestorm.known and Bladestorm:Up() and Player.rage.deficit < (Bladestorm:Remains() * 15))
+	) then
+		UseExtra(IgnorePain)
+	end
 	if Player.enemies > 2 then
-		return self:hac()
+		return self:aoe()
 	end
 	if Target.health.pct < (Massacre.known and 35 or 20) then
 		local apl = self:execute()
@@ -2036,54 +2054,75 @@ end
 
 APL[SPEC.ARMS].execute = function(self)
 --[[
-actions.execute=sweeping_strikes,if=spell_targets.whirlwind>1
-actions.execute+=/rend,if=remains<=gcd&(!talent.warbreaker&cooldown.colossus_smash.remains<4|talent.warbreaker&cooldown.warbreaker.remains<4)&target.time_to_die>12
+actions.execute=whirlwind,if=buff.collateral_damage.up&cooldown.sweeping_strikes.remains<3
+actions.execute+=/sweeping_strikes,if=active_enemies>1
+actions.execute+=/mortal_strike,if=dot.rend.remains<=gcd&talent.bloodletting
+actions.execute+=/rend,if=remains<=gcd&!talent.bloodletting&(!talent.warbreaker&cooldown.colossus_smash.remains<4|talent.warbreaker&cooldown.warbreaker.remains<4)&target.time_to_die>12
 actions.execute+=/avatar,if=cooldown.colossus_smash.ready|debuff.colossus_smash.up|target.time_to_die<20
-actions.execute+=/warbreaker
+actions.execute+=/champions_spear,if=cooldown.colossus_smash.remains<=gcd
+actions.execute+=/warbreaker,if=raid_event.adds.in>22
 actions.execute+=/colossus_smash
-actions.execute+=/thunderous_roar,if=buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up
-actions.execute+=/spear_of_bastion,if=debuff.colossus_smash.up|buff.test_of_might.up
-actions.execute+=/skullsplitter,if=rage<40
-actions.execute+=/cleave,if=spell_targets.whirlwind>2&dot.deep_wounds.remains<gcd
+actions.execute+=/execute,if=buff.sudden_death.react&dot.deep_wounds.remains
+actions.execute+=/thunderous_roar,if=(talent.test_of_might&rage<40)|(!talent.test_of_might&(buff.avatar.up|debuff.colossus_smash.up)&rage<70)
+actions.execute+=/cleave,if=spell_targets.whirlwind>2&dot.deep_wounds.remains<=gcd
+actions.execute+=/bladestorm,if=raid_event.adds.in>45&talent.hurricane&rage<40
+actions.execute+=/mortal_strike,if=debuff.executioners_precision.stack=2&debuff.colossus_smash.remains<=gcd
 actions.execute+=/overpower,if=rage<40&buff.martial_prowess.stack<2
-actions.execute+=/mortal_strike,if=debuff.executioners_precision.stack=2|dot.deep_wounds.remains<=gcd
+actions.execute+=/mortal_strike,if=debuff.executioners_precision.stack=2&buff.martial_prowess.stack=2|!talent.executioners_precision&buff.martial_prowess.stack=2
+actions.execute+=/skullsplitter,if=rage<40
 actions.execute+=/execute
 actions.execute+=/shockwave,if=talent.sonic_boom
 actions.execute+=/overpower
 actions.execute+=/bladestorm
+actions.execute+=/wrecking_throw
 ]]
+	if CollateralDamage.known and Whirlwind:Usable() and CollateralDamage:Up() and SweepingStrikes:Ready(3) then
+		return Whirlwind
+	end
 	if Player.enemies > 1 and SweepingStrikes:Usable() and SweepingStrikes:Down() then
 		UseCooldown(SweepingStrikes)
 	end
-	if Rend:Usable() and Rend:Remains() < Player.gcd and Target.timeToDie > 12 and self.colossus:Ready(4) then
+	if Bloodletting.known and MortalStrike:Usable() and Rend:Remains() < Player.gcd then
+		return MortalStrike
+	end
+	if not Bloodletting.known and Rend:Usable() and Rend:Remains() < Player.gcd and Target.timeToDie > 12 and self.colossus:Ready(4) then
 		return Rend
 	end
 	if self.use_cds and Avatar:Usable() and (self.colossus:Ready() or ColossusSmash.debuff:Up() or (Target.boss and Target.timeToDie < 20)) then
 		UseCooldown(Avatar)
 	end
+	if self.use_cds and ChampionsSpear:Usable() and (ColossusSmash.debuff:Up() or self.colossus:Ready(Player.gcd)) then
+		UseCooldown(ChampionsSpear)
+	end
 	if self.colossus:Usable() then
 		UseCooldown(self.colossus)
 	end
+	if SuddenDeath.known and Execute:Usable() and SuddenDeath:Up() and DeepWounds:Up() then
+		return Execute
+	end
 	if ThunderousRoar:Usable() and (
-		(TestOfMight.known and TestOfMight:Up()) or
-		(not TestOfMight.known and ColossusSmash.debuff:Up())
+		(TestOfMight.known and Player.rage.current < 40) or
+		(not TestOfMight.known and Player.rage.current < 70 and (Avatar:Up() and ColossusSmash.debuff:Up()))
 	) then
 		UseCooldown(ThunderousRoar)
-	end
-	if self.use_cds and SpearOfBastion:Usable() and (ColossusSmash.debuff:Up() or (TestOfMight.known and TestOfMight:Up())) then
-		UseCooldown(SpearOfBastion)
-	end
-	if Skullsplitter:Usable() and Player.rage.current < 40 then
-		return Skullsplitter
 	end
 	if Cleave:Usable() and Player.enemies > 2 and DeepWounds:Remains() < Player.gcd then
 		return Cleave
 	end
-	if Overpower:Usable() and Player.rage.current < 40 and Overpower:Stack() < 2 then
+	if self.use_cds and Hurricane.known and Bladestorm:Usable() and Player.rage.current < 40 then
+		UseCooldown(Bladestorm)
+	end
+	if MortalStrike:Usable() and ExecutionersPrecision:Stack() >= 2 and ColossusSmash.debuff:Remains() < Player.gcd then
+		return MortalStrike
+	end
+	if Overpower:Usable() and Player.rage.current < 40 and MartialProwess:Stack() < 2 then
 		return Overpower
 	end
-	if MortalStrike:Usable() and (ExecutionersPrecision:Stack() >= 2 or DeepWounds:Remains() < Player.gcd) then
+	if MortalStrike:Usable() and MartialProwess:Stack() >= 2 and (not ExecutionersPrecision.known or ExecutionersPrecision:Stack() >= 2) then
 		return MortalStrike
+	end
+	if Skullsplitter:Usable() and Player.rage.current < 40 then
+		return Skullsplitter
 	end
 	if Execute:Usable() then
 		return Execute
@@ -2097,77 +2136,93 @@ actions.execute+=/bladestorm
 	if self.use_cds and Bladestorm:Usable() then
 		UseCooldown(Bladestorm)
 	end
+	if WreckingThrow:Usable() then
+		UseCooldown(WreckingThrow)
+	end
 end
 
 APL[SPEC.ARMS].single_target = function(self)
 --[[
-actions.single_target=sweeping_strikes,if=spell_targets.whirlwind>1
-actions.single_target+=/mortal_strike
-actions.single_target+=/rend,if=remains<=gcd|talent.tide_of_blood&cooldown.skullsplitter.remains<=gcd&(cooldown.colossus_smash.remains<=gcd|debuff.colossus_smash.up)&dot.rend.remains<dot.rend.duration*0.85
-actions.single_target+=/avatar,if=talent.warlords_torment&rage.pct<33&(cooldown.colossus_smash.ready|debuff.colossus_smash.up|buff.test_of_might.up)|!talent.warlords_torment&(cooldown.colossus_smash.ready|debuff.colossus_smash.up)
-actions.single_target+=/spear_of_bastion,if=cooldown.colossus_smash.remains<=gcd|cooldown.warbreaker.remains<=gcd
-actions.single_target+=/warbreaker
+actions.single_target=whirlwind,if=buff.collateral_damage.up&cooldown.sweeping_strikes.remains<3
+actions.single_target+=/sweeping_strikes,if=active_enemies>1
+actions.single_target+=/execute,if=(buff.juggernaut.up&buff.juggernaut.remains<gcd)|(buff.sudden_death.react&dot.deep_wounds.remains&set_bonus.tier31_2pc|buff.sudden_death.react&!dot.rend.remains&set_bonus.tier31_4pc)
+actions.single_target+=/thunder_clap,if=dot.rend.remains<=gcd&talent.blood_and_thunder&talent.blademasters_torment
+actions.single_target+=/thunderous_roar,if=raid_event.adds.in>15
+actions.single_target+=/avatar,if=raid_event.adds.in>15|target.time_to_die<20
 actions.single_target+=/colossus_smash
-actions.single_target+=/thunderous_roar,if=buff.test_of_might.up|talent.test_of_might&debuff.colossus_smash.up&rage.pct<33|!talent.test_of_might&debuff.colossus_smash.up
-actions.single_target+=/bladestorm,if=talent.hurricane&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)|talent.unhinged&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)
-actions.single_target+=/skullsplitter,if=talent.tide_of_blood&dot.rend.remains&(debuff.colossus_smash.up|cooldown.colossus_smash.remains>gcd*4&buff.test_of_might.up|!talent.test_of_might&cooldown.colossus_smash.remains>gcd*4)|rage<30
+actions.single_target+=/warbreaker,if=raid_event.adds.in>22
+actions.single_target+=/mortal_strike
+actions.single_target+=/thunder_clap,if=dot.rend.remains<=gcd&talent.blood_and_thunder
+actions.single_target+=/whirlwind,if=talent.storm_of_swords&debuff.colossus_smash.up
+actions.single_target+=/bladestorm,if=talent.hurricane&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)&buff.hurricane.remains<2|talent.unhinged&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)
+actions.single_target+=/champions_spear,if=buff.test_of_might.up|debuff.colossus_smash.up
+actions.single_target+=/skullsplitter
 actions.single_target+=/execute,if=buff.sudden_death.react
 actions.single_target+=/shockwave,if=talent.sonic_boom.enabled
-actions.single_target+=/ignore_pain,if=talent.anger_management|talent.test_of_might&debuff.colossus_smash.up
-actions.single_target+=/whirlwind,if=talent.storm_of_swords&talent.battlelord&rage.pct>80&debuff.colossus_smash.up
-actions.single_target+=/overpower,if=charges=2&!talent.battlelord&(debuff.colossus_smash.down|rage.pct<25)|talent.battlelord
-actions.single_target+=/whirlwind,if=talent.storm_of_swords|talent.fervor_of_battle&active_enemies>1
-actions.single_target+=/thunder_clap,if=talent.battlelord&talent.blood_and_thunder
-actions.single_target+=/overpower,if=debuff.colossus_smash.down&rage.pct<50&!talent.battlelord|rage.pct<25
+actions.single_target+=/whirlwind,if=talent.storm_of_swords&talent.test_of_might&cooldown.colossus_smash.remains>gcd*7
+actions.single_target+=/overpower,if=charges=2&!talent.battlelord|talent.battlelord
+actions.single_target+=/whirlwind,if=talent.storm_of_swords
+actions.single_target+=/slam,if=talent.crushing_force
 actions.single_target+=/whirlwind,if=buff.merciless_bonegrinder.up
-actions.single_target+=/cleave,if=set_bonus.tier29_2pc&!talent.crushing_force
-actions.single_target+=/slam,if=rage>30&(!talent.fervor_of_battle|talent.fervor_of_battle&active_enemies=1)
+actions.single_target+=/thunder_clap
+actions.single_target+=/slam
 actions.single_target+=/bladestorm
 actions.single_target+=/cleave
 actions.single_target+=/wrecking_throw
-actions.single_target+=/rend,if=remains<duration*0.3
 ]]
+	if CollateralDamage.known and Whirlwind:Usable() and CollateralDamage:Up() and SweepingStrikes:Ready(3) then
+		return Whirlwind
+	end
 	if Player.enemies > 1 and SweepingStrikes:Usable() and SweepingStrikes:Down() then
 		UseCooldown(SweepingStrikes)
 	end
-	if MortalStrike:Usable() then
-		return MortalStrike
-	end
-	if Rend:Usable() and (
-		(Rend:Remains() < Player.gcd) or
-		(TideOfBlood.known and Skullsplitter:Ready(Player.gcd) and (self.colossus:Ready(Player.gcd) or ColossusSmash.debuff:Up()) and Rend:Remains() < (Rend:Duration() * 0.85))
+	if Execute:Usable() and (
+		(Juggernaut.known and Juggernaut:Up() and Juggernaut:Remains() < Player.gcd) or
+		(SuddenDeath:Up() and (
+			(Player.set_bonus.t31 >= 2 and DeepWounds:Up()) or
+			(Player.set_bonus.t31 >= 4 and Rend:Down())
+		))
 	) then
-		return Rend
+		return Execute
 	end
-	if self.use_cds and Avatar:Usable() and (
-		(WarlordsTorment.known and Player.rage.pct < 33 and (self.colossus:Ready() or ColossusSmash.debuff:Up() or TestOfMight:Up())) or
-		(not WarlordsTorment.known and (self.colossus:Ready() or ColossusSmash.debuff:Up()))
-	) then
+	if BloodAndThunder.known and BlademastersTorment.known and ThunderClap:Usable() and Rend:Remains() < Player.gcd then
+		return ThunderClap
+	end
+	if ThunderousRoar:Usable() then
+		UseCooldown(ThunderousRoar)
+	end
+	if self.use_cds and Avatar:Usable() then
 		UseCooldown(Avatar)
-	end
-	if self.use_cds and SpearOfBastion:Usable() and (not self.colossus.known or self.colossus:Ready(Player.gcd)) then
-		UseCooldown(SpearOfBastion)
 	end
 	if self.colossus:Usable() then
 		UseCooldown(self.colossus)
 	end
-	if ThunderousRoar:Usable() and (
-		(TestOfMight.known and (TestOfMight:Up() or (ColossusSmash.debuff:Up() and Player.rage.pct < 33))) or
+	if MortalStrike:Usable() then
+		return MortalStrike
+	end
+	if BloodAndThunder.known and ThunderClap:Usable() and Rend:Remains() < Player.gcd then
+		return ThunderClap
+	end
+	if StormOfSwords.known and Whirlwind:Usable() and ColossusSmash.debuff:Up() then
+		return Whirlwind
+	end
+	if self.use_cds and Bladestorm:Usable() and (
+		Unhinged.known or
+		(Hurricane.known and Hurricane:Remains() < 2)
+	) and (
+		(TestOfMight.known and TestOfMight:Up()) or
 		(not TestOfMight.known and ColossusSmash.debuff:Up())
 	) then
-		UseCooldown(ThunderousRoar)
-	end
-	if self.use_cds and Bladestorm:Usable() and (Hurricane.known or Unhinged.known) and ((TestOfMight.known and TestOfMight:Up()) or (not TestOfMight.known and ColossusSmash.debuff:Up())) then
 		UseCooldown(Bladestorm)
 	end
-	if Skullsplitter:Usable() and (
-		Player.rage.current < 30 or
-		(TideOfBlood.known and Rend:Up() and (
-			ColossusSmash.debuff:Up() or
-			(TestOfMight.known and not self.colossus:Ready(Player.gcd * 4) and TestOfMight:Up()) or
-			(not TestOfMight.known and not self.colossus:Ready(Player.gcd * 4)))
-		)
+	if self.use_cds and ChampionsSpear:Usable() and (
+		(TestOfMight.known and TestOfMight:Up()) or
+		ColossusSmash.debuff:Up() or
+		(not self.colossus.known and not TestOfMight.known)
 	) then
+		UseCooldown(ChampionsSpear)
+	end
+	if Skullsplitter:Usable() then
 		return Skullsplitter
 	end
 	if SuddenDeath.known and Execute:Usable() and SuddenDeath:Up() then
@@ -2179,22 +2234,16 @@ actions.single_target+=/rend,if=remains<duration*0.3
 	if SonicBoom.known and Shockwave:Usable() then
 		return Shockwave
 	end
-	if IgnorePain:Usable() and (AngerManagement.known or (TestOfMight.known and ColossusSmash.debuff:Up())) then
-		UseCooldown(IgnorePain)
-	end
-	if StormOfSwords.known and Battlelord.known and Whirlwind:Usable() and Player.rage.pct > 80 and ColossusSmash.debuff:Up() then
+	if StormOfSwords.known and TestOfMight.known and Whirlwind:Usable() and not self.colossus:Ready(Player.gcd * 7) then
 		return Whirlwind
 	end
-	if Overpower:Usable() and (Battlelord.known or (Overpower:Charges() == 2 and (Player.rage.pct < 25 or ColossusSmash.debuff:Down()))) then
+	if Overpower:Usable() and (Battlelord.known or Overpower:Charges() >= 2) then
 		return Overpower
 	end
-	if Whirlwind:Usable() and (StormOfSwords.known or (FervorOfBattle.known and Player.enemies > 1)) then
+	if StormOfSwords.known and Whirlwind:Usable() then
 		return Whirlwind
 	end
-	if Cleave:Usable() and Player.set_bonus.t29 >= 2 and not CrushingForce.known then
-		return Cleave
-	end
-	if Slam:Usable() and Player.rage.current > 30 and (not FervorOfBattle.known or Player.enemies == 1) then
+	if CrushingForce.known and Slam:Usable() then
 		return Slam
 	end
 	if self.use_cds and Bladestorm:Usable() then
@@ -2206,59 +2255,59 @@ actions.single_target+=/rend,if=remains<duration*0.3
 	if WreckingThrow:Usable() then
 		UseCooldown(WreckingThrow)
 	end
-	if Rend:Usable() and Rend:Refreshable() then
-		return Rend
-	end
 end
 
-APL[SPEC.ARMS].hac = function(self)
+APL[SPEC.ARMS].aoe = function(self)
 --[[
-actions.hac=execute,if=buff.juggernaut.up&buff.juggernaut.remains<gcd
-actions.hac+=/thunder_clap,if=active_enemies>2&talent.thunder_clap&talent.blood_and_thunder&talent.rend&dot.rend.remains<=dot.rend.duration*0.3
-actions.hac+=/sweeping_strikes,if=active_enemies>=2&(cooldown.bladestorm.remains>15|!talent.bladestorm)
-actions.hac+=/rend,if=active_enemies=1&remains<=gcd&(target.health.pct>20|talent.massacre&target.health.pct>35)|talent.tide_of_blood&cooldown.skullsplitter.remains<=gcd&(cooldown.colossus_smash.remains<=gcd|debuff.colossus_smash.up)&dot.rend.remains<dot.rend.duration*0.85
-actions.hac+=/avatar,if=raid_event.adds.in>15|talent.blademasters_torment&active_enemies>1|target.time_to_die<20
-actions.hac+=/warbreaker,if=raid_event.adds.in>22|active_enemies>1
-actions.hac+=/colossus_smash,cycle_targets=1,if=(target.health.pct<20|talent.massacre&target.health.pct<35)
-actions.hac+=/colossus_smash
-actions.hac+=/thunderous_roar,if=(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)&raid_event.adds.in>15|active_enemies>1&dot.deep_wounds.remains
-actions.hac+=/spear_of_bastion,if=(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)&raid_event.adds.in>15
-actions.hac+=/bladestorm,if=talent.unhinged&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)
-actions.hac+=/bladestorm,if=active_enemies>1&(buff.test_of_might.up|!talent.test_of_might&debuff.colossus_smash.up)&raid_event.adds.in>30|active_enemies>1&dot.deep_wounds.remains
-actions.hac+=/cleave,if=active_enemies>2|!talent.battlelord&buff.merciless_bonegrinder.up&cooldown.mortal_strike.remains>gcd
-actions.hac+=/whirlwind,if=active_enemies>2|talent.storm_of_swords&(buff.merciless_bonegrinder.up|buff.hurricane.up)
-actions.hac+=/skullsplitter,if=rage<40&(!talent.tide_of_blood|dot.rend.remains&dot.deep_wounds.remains)|talent.tide_of_blood&dot.rend.remains&(buff.sweeping_strikes.up&active_enemies>=2|debuff.colossus_smash.up|buff.test_of_might.up)
-actions.hac+=/mortal_strike,if=buff.sweeping_strikes.up&buff.crushing_advance.stack=3,if=set_bonus.tier30_4pc
-actions.hac+=/overpower,if=buff.sweeping_strikes.up&talent.dreadnaught
-actions.hac+=/mortal_strike,cycle_targets=1,if=debuff.executioners_precision.stack=2|dot.deep_wounds.remains<=gcd|talent.dreadnaught&talent.battlelord&active_enemies<=2
-actions.hac+=/execute,cycle_targets=1,if=buff.sudden_death.react|active_enemies<=2&(target.health.pct<20|talent.massacre&target.health.pct<35)|buff.sweeping_strikes.up
-actions.hac+=/thunderous_roar,if=raid_event.adds.in>15
-actions.hac+=/shockwave,if=active_enemies>2&talent.sonic_boom
-actions.hac+=/overpower,if=active_enemies=1&(charges=2&!talent.battlelord&(debuff.colossus_smash.down|rage.pct<25)|talent.battlelord)
-actions.hac+=/slam,if=active_enemies=1&!talent.battlelord&rage.pct>70
-actions.hac+=/overpower,if=charges=2&(!talent.test_of_might|talent.test_of_might&debuff.colossus_smash.down|talent.battlelord)|rage<70
-actions.hac+=/thunder_clap,if=active_enemies>2
-actions.hac+=/mortal_strike
-actions.hac+=/rend,if=active_enemies=1&dot.rend.remains<duration*0.3
-actions.hac+=/whirlwind,if=talent.storm_of_swords|talent.fervor_of_battle&active_enemies>1
-actions.hac+=/cleave,if=!talent.crushing_force
-actions.hac+=/ignore_pain,if=talent.battlelord&talent.anger_management&rage>30&(target.health.pct>20|talent.massacre&target.health.pct>35)
-actions.hac+=/slam,if=talent.crushing_force&rage>30&(talent.fervor_of_battle&active_enemies=1|!talent.fervor_of_battle)
-actions.hac+=/shockwave,if=talent.sonic_boom
-actions.hac+=/bladestorm,if=raid_event.adds.in>30
-actions.hac+=/wrecking_throw
+actions.aoe=execute,if=buff.juggernaut.up&buff.juggernaut.remains<gcd
+actions.aoe+=/whirlwind,if=buff.collateral_damage.up&cooldown.sweeping_strikes.remains<3
+actions.aoe+=/thunder_clap,if=talent.thunder_clap&talent.blood_and_thunder&talent.rend&dot.rend.remains<=dot.rend.duration*0.3
+actions.aoe+=/sweeping_strikes,if=cooldown.bladestorm.remains>15|talent.improved_sweeping_strikes&cooldown.bladestorm.remains>21|!talent.bladestorm|!talent.bladestorm&talent.blademasters_torment&cooldown.avatar.remains>15|!talent.bladestorm&talent.blademasters_torment&talent.improved_sweeping_strikes&cooldown.avatar.remains>21
+actions.aoe+=/avatar,if=raid_event.adds.in>15|talent.blademasters_torment|target.time_to_die<20|buff.hurricane.remains<3
+actions.aoe+=/warbreaker,if=raid_event.adds.in>22|active_enemies>1
+actions.aoe+=/colossus_smash,cycle_targets=1,if=(target.health.pct<20|talent.massacre&target.health.pct<35)
+actions.aoe+=/colossus_smash
+actions.aoe+=/execute,if=buff.sudden_death.react&set_bonus.tier31_4pc
+actions.aoe+=/cleave,if=buff.martial_prowess.stack=2
+actions.aoe+=/mortal_strike,if=talent.sharpened_blades&buff.sweeping_strikes.up&buff.martial_prowess.stack=2&active_enemies<=8
+actions.aoe+=/thunderous_roar,if=buff.test_of_might.up|debuff.colossus_smash.up|dot.deep_wounds.remains
+actions.aoe+=/champions_spear,if=buff.test_of_might.up|debuff.colossus_smash.up|dot.deep_wounds.remains
+actions.aoe+=/bladestorm,if=buff.hurricane.remains<3|!talent.hurricane
+actions.aoe+=/whirlwind,if=talent.storm_of_swords
+actions.aoe+=/cleave,if=!talent.fervor_of_battle|talent.fervor_of_battle&dot.deep_wounds.remains<=dot.deep_wounds.duration*0.3
+actions.aoe+=/overpower,if=buff.sweeping_strikes.up&talent.dreadnaught&!talent.test_of_might&active_enemies<3
+actions.aoe+=/whirlwind,if=talent.fervor_of_battle
+actions.aoe+=/overpower,if=buff.sweeping_strikes.up&(talent.dreadnaught|charges=2)
+actions.aoe+=/mortal_strike,cycle_targets=1,if=debuff.executioners_precision.stack=2|dot.deep_wounds.remains<=gcd|active_enemies<3
+actions.aoe+=/execute,cycle_targets=1,if=buff.sudden_death.react|(target.health.pct<20|talent.massacre&target.health.pct<35)|buff.sweeping_strikes.up|active_enemies<=2
+actions.aoe+=/overpower
+actions.aoe+=/thunder_clap,if=active_enemies>3
+actions.aoe+=/mortal_strike
+actions.aoe+=/thunder_clap,if=!talent.crushing_force
+actions.aoe+=/slam
+actions.aoe+=/shockwave
+actions.aoe+=/wrecking_throw
 ]]
-	if Execute:Usable() and Juggernaut:Up() and Juggernaut:Remains() < Player.gcd then
+	if Juggernaut.known and Execute:Usable() and Juggernaut:Up() and Juggernaut:Remains() < Player.gcd then
 		return Execute
 	end
-	if BloodAndThunder.known and Rend.known and ThunderClap:Usable() and (Rend:Refreshable() or Rend:Ticking() < Player.enemies) then
-		return ThunderClap
+	if CollateralDamage.known and Whirlwind:Usable() and CollateralDamage:Up() and SweepingStrikes:Ready(3) then
+		return Whirlwind
 	end
-	if SweepingStrikes:Usable() and SweepingStrikes:Down() and (not Bladestorm.known or not Bladestorm:Ready(15)) then
+	if BloodAndThunder.known and Rend.known and (Rend:Refreshable() or Rend:Ticking() < Player.enemies) then
+		if Player.set_bonus.t31 >= 4 and Execute:Usable() and SuddenDeath:Up() then
+			return Execute
+		end
+		if ThunderClap:Usable() then
+			return ThunderClap
+		end
+	end
+	if SweepingStrikes:Usable() and SweepingStrikes:Down() and (
+		not Bladestorm.known or
+		not Bladestorm:Ready(15) or
+		(ImprovedSweepingStrikes.known and not Bladestorm:Ready(21))
+	) then
 		UseCooldown(SweepingStrikes)
-	end
-	if TideOfBlood.known and Rend:Usable() and Skullsplitter:Ready(Player.gcd) and (self.colossus:Ready(Player.gcd) or ColossusSmash.debuff:Up()) and Rend:Remains() < Rend:Duration() * 0.85 then
-		return Rend
 	end
 	if self.use_cds and Avatar:Usable() then
 		UseCooldown(Avatar)
@@ -2266,34 +2315,41 @@ actions.hac+=/wrecking_throw
 	if self.colossus:Usable() then
 		UseCooldown(self.colossus)
 	end
-	if Cleave:Usable() and DeepWounds:Ticking() < Player.enemies then
+	if Player.set_bonus.t31 >= 4 and Execute:Usable() and SuddenDeath:Up() then
+		return Execute
+	end
+	if Cleave:Usable() and MartialProwess:Stack() >= 2 then
 		return Cleave
 	end
-	if ThunderousRoar:Usable() and (
+	if SharpenedBlades.known and MortalStrike:Usable() and Player.enemies <= 8 and SweepingStrikes:Up() and MartialProwess:Stack() >= 2 then
+		return MortalStrike
+	end
+	if self.use_cds and ThunderousRoar:Usable() and (
 		(TestOfMight.known and TestOfMight:Up()) or
-		(not TestOfMight.known and ColossusSmash.debuff:Up()) or
+		ColossusSmash.debuff:Up() or
 		DeepWounds:Up()
 	) then
 		UseCooldown(ThunderousRoar)
 	end
-	if self.use_cds and SpearOfBastion:Usable() and (
+	if self.use_cds and ChampionsSpear:Usable() and (
 		(TestOfMight.known and TestOfMight:Up()) or
-		(not TestOfMight.known and ColossusSmash.debuff:Up())
-	) then
-		UseCooldown(SpearOfBastion)
-	end
-	if self.use_cds and Bladestorm:Usable() and (
-		(TestOfMight.known and TestOfMight:Up()) or
-		(not TestOfMight.known and ColossusSmash.debuff:Up()) or
+		ColossusSmash.debuff:Up() or
 		DeepWounds:Up()
 	) then
+		UseCooldown(ChampionsSpear)
+	end
+	if self.use_cds and Bladestorm:Usable() and (not Hurricane.known or Hurricane:Remains() < 3) then
 		UseCooldown(Bladestorm)
 	end
-	if Cleave:Usable() then
-		return Cleave
-	end
-	if Whirlwind:Usable() then
+	if StormOfSwords.known and Whirlwind:Usable() then
 		return Whirlwind
+	end
+	if Cleave:Usable() and (
+		not FervorOfBattle.known or
+		DeepWounds:Refreshable() or
+		DeepWounds:Ticking() < Player.enemies
+	) then
+		return Cleave
 	end
 	if Skullsplitter:Usable() and (
 		(Player.rage.current < 40 and (not TideOfBlood.known or (Rend:Up() and DeepWounds:Up()))) or
@@ -2301,44 +2357,49 @@ actions.hac+=/wrecking_throw
 	) then
 		return Skullsplitter
 	end
-	if CrushingAdvance.known and MortalStrike:Usable() and SweepingStrikes:Up() and CrushingAdvance:Stack() >= 3 then
-		return MortalStrike
-	end
-	if Dreadnaught.known and Overpower:Usable() and SweepingStrikes:Up() then
+	if Dreadnaught.known and Overpower:Usable() and not TestOfMight.known and SweepingStrikes:Up() and Player.enemies < 3 then
 		return Overpower
 	end
-	if MortalStrike:Usable() and (ExecutionersPrecision:Stack() >= 2 or DeepWounds:Remains() < Player.gcd) then
+	if FervorOfBattle.known and Whirlwind:Usable() then
+		return Whirlwind
+	end
+	if Overpower:Usable() and (Dreadnaught.known or Overpower:Charges() == 2) then
+		return Overpower
+	end
+	if MortalStrike:Usable() and (
+		Player.enemies < 3 or
+		ExecutionersPrecision:Stack() >= 2 or
+		DeepWounds:Remains() < Player.gcd or
+		(CrushingAdvance.known and CrushingAdvance:Stack() >= 3)
+	) then
 		return MortalStrike
 	end
-	if Execute:Usable() and (SuddenDeath:Up() or SweepingStrikes:Up()) then
+	if Execute:Usable() then
 		return Execute
 	end
-	if ThunderousRoar:Usable() then
-		UseCooldown(ThunderousRoar)
-	end
-	if SonicBoom.known and Shockwave:Usable() then
-		return Shockwave
-	end
-	if Overpower:Usable() and (Player.rage.current < 70 or (Overpower:Charges() == 2 and (Battlelord.known or not TestOfMight.known or ColossusSmash.debuff:Down()))) then
+	if Overpower:Usable() then
 		return Overpower
 	end
-	if ThunderClap:Usable() then
+	if ThunderClap:Usable() and Player.enemies > 3 then
 		return ThunderClap
 	end
 	if MortalStrike:Usable() then
 		return MortalStrike
 	end
-	if not CrushingForce.known and Cleave:Usable() then
+	if SonicBoom.known and Shockwave:Usable() then
+		return Shockwave
+	end
+	if not CrushingForce.known and ThunderClap:Usable() then
+		return ThunderClap
+	end
+	if Cleave:Usable() then
 		return Cleave
 	end
-	if Battlelord.known and AngerManagement.known and IgnorePain:Usable() and Player.rage.current > 30 and Target.health.pct > (Massacre.known and 35 or 20) then
-		UseCooldown(IgnorePain)
-	end
-	if CrushingForce.known and not FervorOfBattle.known and Slam:Usable() and Player.rage.current > 30 then
+	if Slam:Usable() and (CrushingForce.known or Player.rage.deficit < 40) then
 		return Slam
 	end
-	if self.use_cds and Bladestorm:Usable() then
-		UseCooldown(Bladestorm)
+	if Shockwave:Usable() then
+		return Shockwave
 	end
 	if WreckingThrow:Usable() then
 		return WreckingThrow
@@ -2387,15 +2448,15 @@ actions+=/run_action_list,name=movement,if=movement.distance>5
 actions+=/heroic_leap,if=(raid_event.movement.distance>25&raid_event.movement.in>45)
 actions+=/potion
 actions+=/pummel,if=target.debuff.casting.react
-actions+=/use_item,name=enforcers_stun_grenade,if=buff.enrage.up&(!cooldown.recklessness.remains|buff.recklessness.remains>10)&(!cooldown.spear_of_bastion.remains|cooldown.spear_of_bastion.remains>50|buff.elysian_might.up)|fight_remains<25
-actions+=/spear_of_bastion,if=buff.enrage.up&rage<70
+actions+=/use_item,name=enforcers_stun_grenade,if=buff.enrage.up&(!cooldown.recklessness.remains|buff.recklessness.remains>10)&(!cooldown.champions_spear.remains|cooldown.champions_spear.remains>50|buff.elysian_might.up)|fight_remains<25
+actions+=/champions_spear,if=buff.enrage.up&rage<70
 actions+=/rampage,if=cooldown.recklessness.remains<3&talent.reckless_abandon.enabled
 actions+=/recklessness,if=runeforge.sinful_surge&gcd.remains=0&(variable.execute_phase|(target.time_to_pct_35>40&talent.anger_management|target.time_to_pct_35>70&!talent.anger_management))&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
-actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(!runeforge.signet_of_tormented_kings.equipped|variable.bladestorm_condition|buff.elysian_might.up&rage<70)&(cooldown.spear_of_bastion.remains<5|cooldown.spear_of_bastion.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
+actions+=/recklessness,if=runeforge.elysian_might&gcd.remains=0&(!runeforge.signet_of_tormented_kings.equipped|variable.bladestorm_condition|buff.elysian_might.up&rage<70)&(cooldown.champions_spear.remains<5|cooldown.champions_spear.remains>20)&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
 actions+=/recklessness,if=!variable.unique_legendaries&gcd.remains=0&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)&(!covenant.necrolord|cooldown.conquerors_banner.remains>20)
 actions+=/recklessness,use_off_gcd=1,if=runeforge.signet_of_tormented_kings.equipped&gcd.remains&prev_gcd.1.rampage&((buff.bloodlust.up|talent.anger_management.enabled|raid_event.adds.in>10)|target.time_to_die>100|variable.execute_phase|target.time_to_die<15&raid_event.adds.in>10)&(spell_targets.whirlwind=1|buff.meat_cleaver.up)
 actions+=/whirlwind,if=spell_targets.whirlwind>1&!buff.meat_cleaver.up|raid_event.adds.in<gcd&!buff.meat_cleaver.up
-actions+=/bloodthirst,if=buff.enrage.down&rage<50&(covenant.kyrian&cooldown.spear_of_bastion.remains<gcd|runeforge.signet_of_tormented_kings.equipped&cooldown.recklessness.remains<gcd)
+actions+=/bloodthirst,if=buff.enrage.down&rage<50&(covenant.kyrian&cooldown.champions_spear.remains<gcd|runeforge.signet_of_tormented_kings.equipped&cooldown.recklessness.remains<gcd)
 actions+=/blood_fury
 actions+=/berserking,if=buff.recklessness.up
 actions+=/lights_judgment,if=buff.recklessness.down&debuff.siegebreaker.down
@@ -2409,15 +2470,15 @@ actions+=/call_action_list,name=single_target
 	self.execute_phase = Target.health.pct < (Massacre.known and 35 or 20) or (Condemn.known and Target.health.pct > 80)
 	--self.unique_legendaries = SignetOfTormentedKings.known or SinfulSurge.known  or ElysianMight.known
 	self.bladestorm_condition = self.use_cds and (Rampage:Previous() or Enrage:Remains() > (Player.gcd * 2.5))
-	if self.use_cds and SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 70 then
-		UseCooldown(SpearOfBastion)
+	if self.use_cds and ChampionsSpear:Usable() and Enrage:Up() and Player.rage.current < 70 then
+		UseCooldown(ChampionsSpear)
 	end
 	if RecklessAbandon.known and Rampage:Usable() and Recklessness:Ready(3) then
 		return Rampage
 	end
 	if self.use_cds and Recklessness:Usable() and (Player.enemies == 1 or WhirlwindFury.buff:Up()) and (
 		(SinfulSurge.known and (self.execute_phase or ((AngerManagement.known and Target:TimeToPct(35) > 40) or (not AngerManagement.known and Target:TimeToPct(35) > 70)))) or
-		(ElysianMight.known and (not SignetOfTormentedKings.known or self.bladestorm_condition or (ElysianMight:Up() and Player.rage.current < 70)) and (SpearOfBastion:Ready(5) or not SpearOfBastion:Ready(20))) or
+		(ElysianMight.known and (not SignetOfTormentedKings.known or self.bladestorm_condition or (ElysianMight:Up() and Player.rage.current < 70)) and (ChampionsSpear:Ready(5) or not ChampionsSpear:Ready(20))) or
 		(SignetOfTormentedKings.known and Rampage:Previous() and (Target.timeToDie > 100 or self.execute_phase or Target.timeToDie < 15))
 	) then
 		UseCooldown(Recklessness)
@@ -2425,7 +2486,7 @@ actions+=/call_action_list,name=single_target
 	if Player.enemies > 1 and WhirlwindFury:Usable() and WhirlwindFury.buff:Down() then
 		return WhirlwindFury
 	end
-	if Bloodthirst:Usable() and Enrage:Down() and Player.rage.current < 50 and ((SpearOfBastion.known and SpearOfBastion:Ready(Player.gcd)) or (SignetOfTormentedKings.known and Recklessness:Ready(Player.gcd))) then
+	if Bloodthirst:Usable() and Enrage:Down() and Player.rage.current < 50 and ((ChampionsSpear.known and ChampionsSpear:Ready(Player.gcd)) or (SignetOfTormentedKings.known and Recklessness:Ready(Player.gcd))) then
 		return Bloodthirst
 	end
 	if Player.health.pct < Opt.heal_threshold then
@@ -2445,15 +2506,15 @@ end
 APL[SPEC.FURY].aoe = function(self)
 --[[
 actions.aoe=cancel_buff,name=bladestorm,if=spell_targets.whirlwind>1&gcd.remains=0&soulbind.first_strike&buff.first_strike.remains&buff.enrage.remains<gcd
-actions.aoe+=/spear_of_bastion,if=buff.enrage.up&rage<40&spell_targets.whirlwind>1
+actions.aoe+=/champions_spear,if=buff.enrage.up&rage<40&spell_targets.whirlwind>1
 actions.aoe+=/bladestorm,if=buff.enrage.up&spell_targets.whirlwind>2
 actions.aoe+=/siegebreaker,if=spell_targets.whirlwind>1
 actions.aoe+=/rampage,if=spell_targets.whirlwind>1
-actions.aoe+=/spear_of_bastion,if=buff.enrage.up&cooldown.recklessness.remains>5&spell_targets.whirlwind>1
+actions.aoe+=/champions_spear,if=buff.enrage.up&cooldown.recklessness.remains>5&spell_targets.whirlwind>1
 actions.aoe+=/bladestorm,if=buff.enrage.remains>gcd*2.5&spell_targets.whirlwind>1
 ]]
-	if self.use_cds and SpearOfBastion:Usable() and Enrage:Up() and Player.rage.current < 40 then
-		UseCooldown(SpearOfBastion)
+	if self.use_cds and ChampionsSpear:Usable() and Enrage:Up() and Player.rage.current < 40 then
+		UseCooldown(ChampionsSpear)
 	end
 	if self.use_cds and BladestormFury:Usable() and self.bladestorm_condition and Player.enemies > 2 then
 		UseCooldown(BladestormFury)
@@ -2464,8 +2525,8 @@ actions.aoe+=/bladestorm,if=buff.enrage.remains>gcd*2.5&spell_targets.whirlwind>
 	if Rampage:Usable() then
 		return Rampage
 	end
-	if self.use_cds and SpearOfBastion:Usable() and Enrage:Up() and not Recklessness:Ready(5) then
-		UseCooldown(SpearOfBastion)
+	if self.use_cds and ChampionsSpear:Usable() and Enrage:Up() and not Recklessness:Ready(5) then
+		UseCooldown(ChampionsSpear)
 	end
 	if self.use_cds and BladestormFury:Usable() and self.bladestorm_condition then
 		UseCooldown(BladestormFury)
@@ -2481,9 +2542,9 @@ actions.single_target+=/siegebreaker,if=spell_targets.whirlwind>1|raid_event.add
 actions.single_target+=/rampage,if=buff.recklessness.up|(buff.enrage.remains<gcd|rage>80)|buff.frenzy.remains<1.5
 actions.single_target+=/crushing_blow,if=set_bonus.tier28_2pc|charges=2|(buff.recklessness.up&variable.execute_phase&talent.massacre.enabled)
 actions.single_target+=/execute
-actions.single_target+=/spear_of_bastion,if=runeforge.elysian_might&buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
+actions.single_target+=/champions_spear,if=runeforge.elysian_might&buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
 actions.single_target+=/bladestorm,if=variable.bladestorm_condition&(!buff.recklessness.remains|rage<50)&(spell_targets.whirlwind=1&raid_event.adds.in>45|spell_targets.whirlwind=2)
-actions.single_target+=/spear_of_bastion,if=buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
+actions.single_target+=/champions_spear,if=buff.enrage.up&cooldown.recklessness.remains>5&(buff.recklessness.up|target.time_to_die<20|debuff.siegebreaker.up|!talent.siegebreaker&target.time_to_die>68)&raid_event.adds.in>55
 actions.single_target+=/raging_blow,if=set_bonus.tier28_2pc|charges=2|(buff.recklessness.up&variable.execute_phase&talent.massacre.enabled)
 actions.single_target+=/bloodthirst,if=buff.enrage.down|conduit.vicious_contempt.rank>5&target.health.pct<35
 actions.single_target+=/bloodbath,if=buff.enrage.down|conduit.vicious_contempt.rank>5&target.health.pct<35&!talent.cruelty.enabled
@@ -2505,8 +2566,8 @@ actions.single_target+=/whirlwind
 	if ExecuteFury:Usable() then
 		return ExecuteFury
 	end
-	if self.use_cds and SpearOfBastion:Usable() and Enrage:Up() and not Recklessness:Ready(5) and (Recklessness:Up() or (Target.boss and Target.timeToDie < 20) or (Siegebreaker.known and Siegebreaker:Up()) or (Target.boss and not Siegebreaker.known and Target.timeToDie > 68)) then
-		UseCooldown(SpearOfBastion)
+	if self.use_cds and ChampionsSpear:Usable() and Enrage:Up() and not Recklessness:Ready(5) and (Recklessness:Up() or (Target.boss and Target.timeToDie < 20) or (Siegebreaker.known and Siegebreaker:Up()) or (Target.boss and not Siegebreaker.known and Target.timeToDie > 68)) then
+		UseCooldown(ChampionsSpear)
 	end
 	if self.use_cds and BladestormFury:Usable() and self.bladestorm_condition and (Recklessness:Down() or Player.rage.current < 50) and between(Player.enemies, 1, 2) then
 		UseCooldown(BladestormFury)
@@ -2616,7 +2677,7 @@ APL[SPEC.PROTECTION].cds = function(self)
 actions+=/avatar
 actions+=/ravager
 actions+=/demoralizing_shout,if=talent.booming_voice.enabled
-actions+=/spear_of_bastion
+actions+=/champions_spear
 actions+=/thunderous_roar
 actions+=/shockwave,if=talent.sonic_boom.enabled&buff.avatar.up&talent.unstoppable_force.enabled&!talent.rumbling_earth.enabled
 actions+=/shield_charge
@@ -2630,8 +2691,8 @@ actions+=/shield_charge
 	if BoomingVoice.known and DemoralizingShout:Usable() then
 		return UseCooldown(DemoralizingShout)
 	end
-	if SpearOfBastion:Usable() then
-		return UseCooldown(SpearOfBastion)
+	if ChampionsSpear:Usable() then
+		return UseCooldown(ChampionsSpear)
 	end
 	if ThunderousRoar:Usable() then
 		return UseCooldown(ThunderousRoar)

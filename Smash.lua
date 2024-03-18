@@ -234,6 +234,7 @@ local Player = {
 	set_bonus = {
 		t29 = 0, -- Stones of the Walking Mountain
 		t30 = 0, -- Irons of the Onyx Crucible
+		t31 = 0, -- Molten Vanguard's Mortarplate
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -623,6 +624,11 @@ function Ability:Remains(offGCD)
 	return 0
 end
 
+function Ability:Expiring(seconds)
+	local remains = self:Remains()
+	return remains > 0 and remains < (seconds or Player.gcd)
+end
+
 function Ability:Refreshable()
 	if self.buff_duration > 0 then
 		return self:Remains() < self:Duration() * 0.3
@@ -924,6 +930,13 @@ function Ability:CastLanded(dstGUID, event, missType)
 		self.range_est_start = nil
 	elseif self.max_range < Target.estimated_range then
 		Target.estimated_range = self.max_range
+	end
+	if Opt.auto_aoe and self.auto_aoe then
+		if event == 'SPELL_MISSED' and (missType == 'EVADE' or (missType == 'IMMUNE' and not self.ignore_immune)) then
+			AutoAoe:Remove(dstGUID)
+		elseif event == self.auto_aoe.trigger or (self.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
+			self:RecordTargetHit(dstGUID)
+		end
 	end
 	if Opt.previous and Opt.miss_effect and event == 'SPELL_MISSED' and smashPreviousPanel.ability == self then
 		smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
@@ -1281,8 +1294,12 @@ EarthenTenacity.buff_duration = 20
 
 -- PvP talents
 
--- Trinket Effects
-
+-- Trinket effects
+local MarkOfFyralath = Ability:Add(414532, false, true) -- DoT applied by Fyr'alath the Dreamrender
+MarkOfFyralath.buff_duration = 15
+MarkOfFyralath.tick_interval = 3
+MarkOfFyralath.hasted_ticks = true
+MarkOfFyralath.no_pandemic = true
 -- Class cooldowns
 local PowerInfusion = Ability:Add(10060, true)
 PowerInfusion.buff_duration = 20
@@ -1355,6 +1372,8 @@ end
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
+local FyralathTheDreamrender = InventoryItem:Add(206448)
+FyralathTheDreamrender.cooldown_duration = 120
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1729,21 +1748,21 @@ function Target:Update()
 	self.stunnable = true
 	self.classification = UnitClassification('target')
 	self.player = UnitIsPlayer('target')
-	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
+	self.level = UnitLevel('target')
+	if self.level == -1 then
+		self.level = Player.level + 3
+	end
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
-		if self.level == -1 or (Player.instance == 'party' and self.level >= Player.level + 2) then
-			self.boss = true
-			self.stunnable = false
-		elseif Player.instance == 'raid' or (self.health.max > Player.health.max * 10) then
-			self.stunnable = false
-		end
+		self.boss = self.level >= (Player.level + 3)
+		self.stunnable = self.level < (Player.level + 2)
 	end
 	if self.hostile or Opt.always_on then
 		UI:UpdateCombat()
 		smashPanel:Show()
 		return true
 	end
+	UI:Disappear()
 end
 
 function Target:TimeToPct(pct)
@@ -2976,7 +2995,8 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, border, text_center, text_cd, color_center
+	local border, dim, dim_cd, border, text_center, text_cd
+	local channel = Player.channel
 
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
@@ -3019,33 +3039,21 @@ function UI:UpdateDisplay()
 			dim = Opt.dimmer
 		end
 	end
-	if Player.channel.tick_count > 0 then
+	if channel.ability and not channel.ability.ignore_channel and channel.tick_count > 0 then
 		dim = Opt.dimmer
-		if Player.channel.tick_count > 1 then
+		if channel.tick_count > 1 then
 			local ctime = GetTime()
-			local channel = Player.channel
 			channel.ticks = ((ctime - channel.start) / channel.tick_interval) - channel.ticks_extra
 			channel.ticks_remain = (channel.ends - ctime) / channel.tick_interval
 			text_center = format('TICKS\n%.1f', max(0, channel.ticks))
 			if channel.ability == Player.main then
 				if channel.ticks_remain < 1 or channel.early_chainable then
 					dim = false
-					text_center = 'CHAIN'
-					color_center = 'green'
+					text_center = '|cFF00FF00CHAIN'
 				end
 			elseif channel.interruptible then
 				dim = false
 			end
-		end
-	end
-	if color_center ~= smashPanel.text.center.color then
-		smashPanel.text.center.color = color_center
-		if color_center == 'green' then
-			smashPanel.text.center:SetTextColor(0, 1, 0, 1)
-		elseif color_center == 'red' then
-			smashPanel.text.center:SetTextColor(1, 0, 0, 1)
-		else
-			smashPanel.text.center:SetTextColor(1, 1, 1, 1)
 		end
 	end
 	if border ~= smashPanel.border.overlay then
@@ -3168,6 +3176,7 @@ CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _
 	   e == 'SPELL_CAST_SUCCESS' or
 	   e == 'SPELL_CAST_FAILED' or
 	   e == 'SPELL_DAMAGE' or
+	   e == 'SPELL_ABSORBED' or
 	   e == 'SPELL_ENERGIZE' or
 	   e == 'SPELL_PERIODIC_DAMAGE' or
 	   e == 'SPELL_MISSED' or
@@ -3255,13 +3264,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 			ability.pending_stack_use = false
 		end
 		return -- ignore buffs beyond here
-	end
-	if Opt.auto_aoe then
-		if event == 'SPELL_MISSED' and (missType == 'EVADE' or (missType == 'IMMUNE' and not ability.ignore_immune)) then
-			AutoAoe:Remove(dstGUID)
-		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
-			ability:RecordTargetHit(dstGUID)
-		end
 	end
 	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event, missType)
@@ -3354,6 +3356,9 @@ function Events:PLAYER_REGEN_ENABLED()
 	if Opt.auto_aoe then
 		AutoAoe:Clear()
 	end
+	if APL[Player.spec].precombat_variables then
+		APL[Player.spec]:precombat_variables()
+	end
 end
 
 function Events:PLAYER_EQUIPMENT_CHANGED()
@@ -3386,6 +3391,7 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 
 	Player.set_bonus.t29 = (Player:Equipped(200423) and 1 or 0) + (Player:Equipped(200425) and 1 or 0) + (Player:Equipped(200426) and 1 or 0) + (Player:Equipped(200427) and 1 or 0) + (Player:Equipped(200428) and 1 or 0)
 	Player.set_bonus.t30 = (Player:Equipped(202441) and 1 or 0) + (Player:Equipped(202442) and 1 or 0) + (Player:Equipped(202443) and 1 or 0) + (Player:Equipped(202444) and 1 or 0) + (Player:Equipped(202446) and 1 or 0)
+	Player.set_bonus.t31 = (Player:Equipped(207180) and 1 or 0) + (Player:Equipped(207181) and 1 or 0) + (Player:Equipped(207182) and 1 or 0) + (Player:Equipped(207183) and 1 or 0) + (Player:Equipped(207185) and 1 or 0)
 
 	Player:ResetSwing(true, true)
 	Player:UpdateKnown()

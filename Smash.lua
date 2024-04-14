@@ -1,9 +1,23 @@
 local ADDON = 'Smash'
+local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
+
+BINDING_CATEGORY_SMASH = ADDON
+BINDING_NAME_SMASH_TARGETMORE = "Toggle Targets +"
+BINDING_NAME_SMASH_TARGETLESS = "Toggle Targets -"
+BINDING_NAME_SMASH_TARGET1 = "Set Targets to 1"
+BINDING_NAME_SMASH_TARGET2 = "Set Targets to 2"
+BINDING_NAME_SMASH_TARGET3 = "Set Targets to 3"
+BINDING_NAME_SMASH_TARGET4 = "Set Targets to 4"
+BINDING_NAME_SMASH_TARGET5 = "Set Targets to 5+"
+
+local function log(...)
+	print(ADDON, '-', ...)
+end
+
 if select(2, UnitClass('player')) ~= 'WARRIOR' then
-	DisableAddOn(ADDON)
+	log('[|cFFFF0000Error|r]', 'Not loading because you are not the correct class! Consider disabling', ADDON, 'for this character.')
 	return
 end
-local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 
 -- reference heavily accessed global functions from local scope for performance
 local min = math.min
@@ -261,146 +275,6 @@ local Target = {
 	estimated_range = 30,
 }
 
-local smashPanel = CreateFrame('Frame', 'smashPanel', UIParent)
-smashPanel:SetPoint('CENTER', 0, -169)
-smashPanel:SetFrameStrata('BACKGROUND')
-smashPanel:SetSize(64, 64)
-smashPanel:SetMovable(true)
-smashPanel:SetUserPlaced(true)
-smashPanel:RegisterForDrag('LeftButton')
-smashPanel:SetScript('OnDragStart', smashPanel.StartMoving)
-smashPanel:SetScript('OnDragStop', smashPanel.StopMovingOrSizing)
-smashPanel:Hide()
-smashPanel.icon = smashPanel:CreateTexture(nil, 'BACKGROUND')
-smashPanel.icon:SetAllPoints(smashPanel)
-smashPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-smashPanel.border = smashPanel:CreateTexture(nil, 'ARTWORK')
-smashPanel.border:SetAllPoints(smashPanel)
-smashPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-smashPanel.border:Hide()
-smashPanel.dimmer = smashPanel:CreateTexture(nil, 'BORDER')
-smashPanel.dimmer:SetAllPoints(smashPanel)
-smashPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
-smashPanel.dimmer:Hide()
-smashPanel.swipe = CreateFrame('Cooldown', nil, smashPanel, 'CooldownFrameTemplate')
-smashPanel.swipe:SetAllPoints(smashPanel)
-smashPanel.swipe:SetDrawBling(false)
-smashPanel.swipe:SetDrawEdge(false)
-smashPanel.text = CreateFrame('Frame', nil, smashPanel)
-smashPanel.text:SetAllPoints(smashPanel)
-smashPanel.text.tl = smashPanel.text:CreateFontString(nil, 'OVERLAY')
-smashPanel.text.tl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.tl:SetPoint('TOPLEFT', smashPanel, 'TOPLEFT', 2.5, -3)
-smashPanel.text.tl:SetJustifyH('LEFT')
-smashPanel.text.tr = smashPanel.text:CreateFontString(nil, 'OVERLAY')
-smashPanel.text.tr:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.tr:SetPoint('TOPRIGHT', smashPanel, 'TOPRIGHT', -2.5, -3)
-smashPanel.text.tr:SetJustifyH('RIGHT')
-smashPanel.text.bl = smashPanel.text:CreateFontString(nil, 'OVERLAY')
-smashPanel.text.bl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.bl:SetPoint('BOTTOMLEFT', smashPanel, 'BOTTOMLEFT', 2.5, 3)
-smashPanel.text.bl:SetJustifyH('LEFT')
-smashPanel.text.br = smashPanel.text:CreateFontString(nil, 'OVERLAY')
-smashPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.br:SetPoint('BOTTOMRIGHT', smashPanel, 'BOTTOMRIGHT', -2.5, 3)
-smashPanel.text.br:SetJustifyH('RIGHT')
-smashPanel.text.center = smashPanel.text:CreateFontString(nil, 'OVERLAY')
-smashPanel.text.center:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashPanel.text.center:SetAllPoints(smashPanel.text)
-smashPanel.text.center:SetJustifyH('CENTER')
-smashPanel.text.center:SetJustifyV('CENTER')
-smashPanel.button = CreateFrame('Button', nil, smashPanel)
-smashPanel.button:SetAllPoints(smashPanel)
-smashPanel.button:RegisterForClicks('LeftButtonDown', 'RightButtonDown', 'MiddleButtonDown')
-local smashPreviousPanel = CreateFrame('Frame', 'smashPreviousPanel', UIParent)
-smashPreviousPanel:SetFrameStrata('BACKGROUND')
-smashPreviousPanel:SetSize(64, 64)
-smashPreviousPanel:SetMovable(true)
-smashPreviousPanel:SetUserPlaced(true)
-smashPreviousPanel:RegisterForDrag('LeftButton')
-smashPreviousPanel:SetScript('OnDragStart', smashPreviousPanel.StartMoving)
-smashPreviousPanel:SetScript('OnDragStop', smashPreviousPanel.StopMovingOrSizing)
-smashPreviousPanel:Hide()
-smashPreviousPanel.icon = smashPreviousPanel:CreateTexture(nil, 'BACKGROUND')
-smashPreviousPanel.icon:SetAllPoints(smashPreviousPanel)
-smashPreviousPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-smashPreviousPanel.border = smashPreviousPanel:CreateTexture(nil, 'ARTWORK')
-smashPreviousPanel.border:SetAllPoints(smashPreviousPanel)
-smashPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-local smashCooldownPanel = CreateFrame('Frame', 'smashCooldownPanel', UIParent)
-smashCooldownPanel:SetFrameStrata('BACKGROUND')
-smashCooldownPanel:SetSize(64, 64)
-smashCooldownPanel:SetMovable(true)
-smashCooldownPanel:SetUserPlaced(true)
-smashCooldownPanel:RegisterForDrag('LeftButton')
-smashCooldownPanel:SetScript('OnDragStart', smashCooldownPanel.StartMoving)
-smashCooldownPanel:SetScript('OnDragStop', smashCooldownPanel.StopMovingOrSizing)
-smashCooldownPanel:Hide()
-smashCooldownPanel.icon = smashCooldownPanel:CreateTexture(nil, 'BACKGROUND')
-smashCooldownPanel.icon:SetAllPoints(smashCooldownPanel)
-smashCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-smashCooldownPanel.border = smashCooldownPanel:CreateTexture(nil, 'ARTWORK')
-smashCooldownPanel.border:SetAllPoints(smashCooldownPanel)
-smashCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-smashCooldownPanel.dimmer = smashCooldownPanel:CreateTexture(nil, 'BORDER')
-smashCooldownPanel.dimmer:SetAllPoints(smashCooldownPanel)
-smashCooldownPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
-smashCooldownPanel.dimmer:Hide()
-smashCooldownPanel.swipe = CreateFrame('Cooldown', nil, smashCooldownPanel, 'CooldownFrameTemplate')
-smashCooldownPanel.swipe:SetAllPoints(smashCooldownPanel)
-smashCooldownPanel.swipe:SetDrawBling(false)
-smashCooldownPanel.swipe:SetDrawEdge(false)
-smashCooldownPanel.text = smashCooldownPanel:CreateFontString(nil, 'OVERLAY')
-smashCooldownPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-smashCooldownPanel.text:SetAllPoints(smashCooldownPanel)
-smashCooldownPanel.text:SetJustifyH('CENTER')
-smashCooldownPanel.text:SetJustifyV('CENTER')
-local smashInterruptPanel = CreateFrame('Frame', 'smashInterruptPanel', UIParent)
-smashInterruptPanel:SetFrameStrata('BACKGROUND')
-smashInterruptPanel:SetSize(64, 64)
-smashInterruptPanel:SetMovable(true)
-smashInterruptPanel:SetUserPlaced(true)
-smashInterruptPanel:RegisterForDrag('LeftButton')
-smashInterruptPanel:SetScript('OnDragStart', smashInterruptPanel.StartMoving)
-smashInterruptPanel:SetScript('OnDragStop', smashInterruptPanel.StopMovingOrSizing)
-smashInterruptPanel:Hide()
-smashInterruptPanel.icon = smashInterruptPanel:CreateTexture(nil, 'BACKGROUND')
-smashInterruptPanel.icon:SetAllPoints(smashInterruptPanel)
-smashInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-smashInterruptPanel.border = smashInterruptPanel:CreateTexture(nil, 'ARTWORK')
-smashInterruptPanel.border:SetAllPoints(smashInterruptPanel)
-smashInterruptPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-smashInterruptPanel.swipe = CreateFrame('Cooldown', nil, smashInterruptPanel, 'CooldownFrameTemplate')
-smashInterruptPanel.swipe:SetAllPoints(smashInterruptPanel)
-smashInterruptPanel.swipe:SetDrawBling(false)
-smashInterruptPanel.swipe:SetDrawEdge(false)
-local smashExtraPanel = CreateFrame('Frame', 'smashExtraPanel', UIParent)
-smashExtraPanel:SetFrameStrata('BACKGROUND')
-smashExtraPanel:SetSize(64, 64)
-smashExtraPanel:SetMovable(true)
-smashExtraPanel:SetUserPlaced(true)
-smashExtraPanel:RegisterForDrag('LeftButton')
-smashExtraPanel:SetScript('OnDragStart', smashExtraPanel.StartMoving)
-smashExtraPanel:SetScript('OnDragStop', smashExtraPanel.StopMovingOrSizing)
-smashExtraPanel:Hide()
-smashExtraPanel.icon = smashExtraPanel:CreateTexture(nil, 'BACKGROUND')
-smashExtraPanel.icon:SetAllPoints(smashExtraPanel)
-smashExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-smashExtraPanel.border = smashExtraPanel:CreateTexture(nil, 'ARTWORK')
-smashExtraPanel.border:SetAllPoints(smashExtraPanel)
-smashExtraPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
--- Fury Whirlwind stacks and duration remaining on extra icon
-smashExtraPanel.whirlwind = CreateFrame('Cooldown', nil, smashExtraPanel, 'CooldownFrameTemplate')
-smashExtraPanel.whirlwind:SetAllPoints(smashExtraPanel)
-smashExtraPanel.whirlwind:SetDrawBling(false)
-smashExtraPanel.whirlwind:SetDrawEdge(false)
-smashExtraPanel.whirlwind.stack = smashExtraPanel.whirlwind:CreateFontString(nil, 'OVERLAY')
-smashExtraPanel.whirlwind.stack:SetFont('Fonts\\FRIZQT__.TTF', 18, 'OUTLINE')
-smashExtraPanel.whirlwind.stack:SetTextColor(1, 1, 1, 1)
-smashExtraPanel.whirlwind.stack:SetAllPoints(smashExtraPanel.whirlwind)
-smashExtraPanel.whirlwind.stack:SetJustifyH('CENTER')
-smashExtraPanel.whirlwind.stack:SetJustifyV('CENTER')
-
 -- Start AoE
 
 Player.target_modes = {
@@ -562,6 +436,7 @@ function Ability:Add(spellId, buff, player, spellId2)
 		known = false,
 		rank = 0,
 		rage_cost = 0,
+		rage_gain = 0,
 		cooldown_duration = 0,
 		buff_duration = 0,
 		tick_interval = 0,
@@ -605,7 +480,7 @@ function Ability:Usable(seconds, pool)
 	return self:Ready(seconds)
 end
 
-function Ability:Remains(offGCD)
+function Ability:Remains()
 	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
@@ -618,7 +493,7 @@ function Ability:Remains(offGCD)
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
-			return max(0, expires - Player.ctime - (offGCD and 0 or Player.execute_remains))
+			return max(0, expires - Player.ctime - (self.off_gcd and 0 or Player.execute_remains))
 		end
 	end
 	return 0
@@ -1022,6 +897,7 @@ local Charge = Ability:Add(100, false, true, 105771)
 Charge.buff_duration = 1
 Charge.cooldown_duration = 20
 Charge.requires_charge = true
+Charge.off_gcd = true
 Charge.triggers_gcd = false
 local HeroicLeap = Ability:Add(6544, false, true, 52174)
 HeroicLeap.cooldown_duration = 45
@@ -1032,6 +908,7 @@ HeroicThrow.cooldown_duration = 6
 local Pummel = Ability:Add(6552, false, true)
 Pummel.buff_duration = 4
 Pummel.cooldown_duration = 15
+Pummel.off_gcd = true
 Pummel.triggers_gcd = false
 local BattleShout = Ability:Add(6673, true, false)
 BattleShout.buff_duration = 3600
@@ -1039,6 +916,7 @@ BattleShout.cooldown_duration = 15
 local Taunt = Ability:Add(355, false, true)
 Taunt.buff_duration = 3
 Taunt.cooldown_duration = 8
+Taunt.off_gcd = true
 Taunt.triggers_gcd = false
 local VictoryRush = Ability:Add(34428, false, true)
 ------ Procs
@@ -1065,6 +943,7 @@ ImpendingVictory.rage_cost = 10
 local Intercept = Ability:Add(198304, false, true)
 Intercept.cooldown_duration = 15
 Intercept.requires_charge = true
+Intercept.off_gcd = true
 Intercept.triggers_gcd = false
 local Massacre = Ability:Add({206315, 281001}, false, true)
 local Ravager = Ability:Add({152277, 228920}, false, true)
@@ -1247,11 +1126,13 @@ local IgnorePain = Ability:Add(190456, true, true)
 IgnorePain.buff_duration = 12
 IgnorePain.cooldown_duration = 1
 IgnorePain.rage_cost = 35
+IgnorePain.off_gcd = true
 IgnorePain.triggers_gcd = false
 local ImmovableObject = Ability:Add(394307, true, true)
 local LastStand = Ability:Add(12975, true, true)
 LastStand.buff_duration = 15
 LastStand.cooldown_duration = 180
+LastStand.off_gcd = true
 LastStand.triggers_gcd = false
 local Revenge = Ability:Add(6572, false, true)
 Revenge.rage_cost = 20
@@ -1264,6 +1145,7 @@ ShieldBlock.cooldown_duration = 16
 ShieldBlock.rage_cost = 30
 ShieldBlock.hasted_cooldown = true
 ShieldBlock.requires_charge = true
+ShieldBlock.off_gcd = true
 ShieldBlock.triggers_gcd = false
 local ShieldCharge = Ability:Add(385952, false, true)
 ShieldCharge.cooldown_duration = 45
@@ -1274,6 +1156,7 @@ local ShieldWall = Ability:Add(871, true, true)
 ShieldWall.buff_duration = 8
 ShieldWall.cooldown_duration = 180
 ShieldWall.requires_charge = true
+ShieldWall.off_gcd = true
 ShieldWall.triggers_gcd = false
 local ThunderClapProt = Ability:Add(6343, false, true)
 ThunderClapProt.buff_duration = 10
@@ -2900,7 +2783,7 @@ function UI:CreateOverlayGlows()
 			end
 		end
 	end
-	UI:UpdateGlowColorAndScale()
+	self:UpdateGlowColorAndScale()
 end
 
 function UI:UpdateGlows()
@@ -2936,6 +2819,18 @@ end
 
 function UI:UpdateDraggable()
 	local draggable = not (Opt.locked or Opt.snap or Opt.aoe)
+	smashPanel:SetMovable(not Opt.snap)
+	smashPreviousPanel:SetMovable(not Opt.snap)
+	smashCooldownPanel:SetMovable(not Opt.snap)
+	smashInterruptPanel:SetMovable(not Opt.snap)
+	smashExtraPanel:SetMovable(not Opt.snap)
+	if not Opt.snap then
+		smashPanel:SetUserPlaced(true)
+		smashPreviousPanel:SetUserPlaced(true)
+		smashCooldownPanel:SetUserPlaced(true)
+		smashInterruptPanel:SetUserPlaced(true)
+		smashExtraPanel:SetUserPlaced(true)
+	end
 	smashPanel:EnableMouse(draggable or Opt.aoe)
 	smashPanel.button:SetShown(Opt.aoe)
 	smashPreviousPanel:EnableMouse(draggable)
@@ -3051,7 +2946,13 @@ function UI:Disappear()
 	Player.cd = nil
 	Player.interrupt = nil
 	Player.extra = nil
-	UI:UpdateGlows()
+	self:UpdateGlows()
+end
+
+function UI:Reset()
+	smashPanel:ClearAllPoints()
+	smashPanel:SetPoint('CENTER', 0, -169)
+	self:SnapAllPanels()
 end
 
 function UI:UpdateDisplay()
@@ -3212,12 +3113,12 @@ function Events:ADDON_LOADED(name)
 		UI:UpdateAlpha()
 		UI:UpdateScale()
 		if firstRun then
-			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
-			print('Type |cFFFFD000' .. SLASH_Smash1 .. '|r for a list of commands.')
+			log('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
+			log('Type |cFFFFD000' .. SLASH_Smash1 .. '|r for a list of commands.')
 			UI:SnapAllPanels()
 		end
 		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
+			log('[|cFFFFD000Warning|r]', ADDON, 'is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 	end
 end
@@ -3294,7 +3195,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and Abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--log(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -3569,7 +3470,7 @@ local function Status(desc, opt, ...)
 	else
 		opt_view = opt and '|cFF00C000On|r' or '|cFFC00000Off|r'
 	end
-	print(ADDON, '-', desc .. ':', opt_view, ...)
+	log(desc .. ':', opt_view, ...)
 end
 
 SlashCmdList[ADDON] = function(msg, editbox)
@@ -3595,7 +3496,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 			else
 				Opt.snap = false
 				Opt.locked = false
-				smashPanel:ClearAllPoints()
+				UI:Reset()
 			end
 			UI:UpdateDraggable()
 			UI.OnResourceFrameShow()
@@ -3835,9 +3736,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		return Status('Show defensives/emergency heals in extra UI', Opt.defensives)
 	end
 	if msg[1] == 'reset' then
-		smashPanel:ClearAllPoints()
-		smashPanel:SetPoint('CENTER', 0, -169)
-		UI:SnapAllPanels()
+		UI:Reset()
 		return Status('Position has been reset to', 'default')
 	end
 	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')

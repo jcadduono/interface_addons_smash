@@ -1187,6 +1187,7 @@ MarkOfFyralath.buff_duration = 15
 MarkOfFyralath.tick_interval = 3
 MarkOfFyralath.hasted_ticks = true
 MarkOfFyralath.no_pandemic = true
+MarkOfFyralath:TrackAuras()
 -- Class cooldowns
 local PowerInfusion = Ability:Add(10060, true)
 PowerInfusion.buff_duration = 20
@@ -1204,6 +1205,7 @@ function InventoryItem:Add(itemId)
 		name = name,
 		icon = icon,
 		can_use = false,
+		off_gcd = true,
 	}
 	setmetatable(item, self)
 	inventoryItems[#inventoryItems + 1] = item
@@ -1227,13 +1229,16 @@ function InventoryItem:Count()
 end
 
 function InventoryItem:Cooldown()
-	local startTime, duration
+	local start, duration
 	if self.equip_slot then
-		startTime, duration = GetInventoryItemCooldown('player', self.equip_slot)
+		start, duration = GetInventoryItemCooldown('player', self.equip_slot)
 	else
-		startTime, duration = GetItemCooldown(self.itemId)
+		start, duration = GetItemCooldown(self.itemId)
 	end
-	return startTime == 0 and 0 or duration - (Player.ctime - startTime)
+	if start == 0 then
+		return 0
+	end
+	return max(0, duration - (Player.ctime - start) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function InventoryItem:Ready(seconds)
@@ -1261,6 +1266,7 @@ local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
 local FyralathTheDreamrender = InventoryItem:Add(206448)
 FyralathTheDreamrender.cooldown_duration = 120
+FyralathTheDreamrender.off_gcd = false
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1436,6 +1442,7 @@ function Player:UpdateKnown()
 	if IgnorePain.known then
 		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 40) or (self.spec == SPEC.FURY and 60) or 35
 	end
+	MarkOfFyralath.known = FyralathTheDreamrender:Equipped()
 
 	Abilities:Update()
 
@@ -1831,6 +1838,12 @@ function MartialProwess:Stack()
 	return Overpower:Stack()
 end
 
+function MarkOfFyralath:Refresh(guid)
+	if self.known and self.aura_targets[guid] then
+		self.aura_targets[guid].expires = Player.time + self.buff_duration
+	end
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1920,6 +1933,9 @@ actions+=/run_action_list,name=single_target,if=!raid_event.adds.exists
 		(Bladestorm.known and Bladestorm:Up() and Player.rage.deficit < (Bladestorm:Remains() * 15))
 	) then
 		UseExtra(IgnorePain)
+	end
+	if self.use_cds then
+		self:trinkets()
 	end
 	if Player.enemies > 2 then
 		return self:aoe()
@@ -2286,6 +2302,31 @@ actions.aoe+=/wrecking_throw
 	end
 	if WreckingThrow:Usable() then
 		return WreckingThrow
+	end
+end
+
+APL[SPEC.ARMS].trinkets = function(self)
+--[[
+actions.trinkets=use_item,name=fyralath_the_dreamrender,,if=dot.mark_of_fyralath.ticking&!talent.blademasters_torment|dot.mark_of_fyralath.ticking&cooldown.avatar.remains>3&cooldown.bladestorm.remains>3&!debuff.colossus_smash.up
+actions.trinkets+=/use_item,use_off_gcd=1,name=algethar_puzzle_box,if=cooldown.avatar.remains<=3
+# Trinkets The trinket with the highest estimated value, will be used first and paired with Avatar.
+actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket1,if=variable.trinket_1_buffs&!variable.trinket_1_manual&(!buff.avatar.up&trinket.1.cast_time>0|!trinket.1.cast_time>0)&buff.avatar.up&(variable.trinket_2_exclude|!trinket.2.has_cooldown|trinket.2.cooldown.remains|variable.trinket_priority=1)|trinket.1.proc.any_dps.duration>=fight_remains
+actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket2,if=variable.trinket_2_buffs&!variable.trinket_2_manual&(!buff.avatar.up&trinket.2.cast_time>0|!trinket.2.cast_time>0)&buff.avatar.up&(variable.trinket_1_exclude|!trinket.1.has_cooldown|trinket.1.cooldown.remains|variable.trinket_priority=2)|trinket.2.proc.any_dps.duration>=fight_remains
+# If only one on use trinket provides a buff, use the other on cooldown. Or if neither trinket provides a buff, use both on cooldown.
+actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket1,if=!variable.trinket_1_buffs&!variable.trinket_1_manual&(!variable.trinket_1_buffs&(trinket.2.cooldown.remains|!variable.trinket_2_buffs)|(trinket.1.cast_time>0&!buff.avatar.up|!trinket.1.cast_time>0)|cooldown.avatar.remains_expected>20)
+actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket2,if=!variable.trinket_2_buffs&!variable.trinket_2_manual&(!variable.trinket_2_buffs&(trinket.1.cooldown.remains|!variable.trinket_1_buffs)|(trinket.2.cast_time>0&!buff.avatar.up|!trinket.2.cast_time>0)|cooldown.avatar.remains_expected>20)
+actions.trinkets+=/use_item,use_off_gcd=1,slot=main_hand,if=!equipped.fyralath_the_dreamrender&(!variable.trinket_1_buffs|trinket.1.cooldown.remains)&(!variable.trinket_2_buffs|trinket.2.cooldown.remains)
+]]
+	if FyralathTheDreamrender:Usable() and MarkOfFyralath:Ticking() >= Player.enemies and (not BlademastersTorment.known or (not Avatar:Ready(3) and (not Bladestorm.known or not Bladestorm:Ready(3)) and ColossusSmash.debuff:Down())) then
+		return UseCooldown(FyralathTheDreamrender)
+	end
+	if Opt.trinket then
+		if Trinket1:Usable() and (Avatar:Up() or (Target.boss and Target.timeToDie < 21)) then
+			return UseCooldown(Trinket1)
+		end
+		if Trinket2:Usable() and (Avatar:Up() or (Target.boss and Target.timeToDie < 21)) then
+			return UseCooldown(Trinket2)
+		end
 	end
 end
 
@@ -3166,6 +3207,7 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 		if Opt.auto_aoe then
 			AutoAoe:Add(dstGUID, true)
 		end
+		MarkOfFyralath:Refresh(dstGUID)
 	elseif dstGUID == Player.guid then
 		Player.swing.last_taken = Player.time
 		if Opt.auto_aoe then
@@ -3229,6 +3271,9 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	end
 	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event, missType)
+		if MarkOfFyralath.known and event ~= 'SPELL_MISSED' then
+			MarkOfFyralath:Refresh(dstGUID)
+		end
 	end
 end
 

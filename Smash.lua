@@ -1171,6 +1171,11 @@ Frenzy.buff_duration = 12
 ------ Talents
 local Bolster = Ability:Add(280001, true, true)
 local BoomingVoice = Ability:Add(202743, false, true)
+local DeepWoundsProt = Ability:Add(115768, false, true, 115767)
+DeepWoundsProt.buff_duration = 15
+DeepWoundsProt.tick_interval = 3
+DeepWoundsProt.hasted_ticks = true
+DeepWoundsProt:TrackAuras()
 local DemoralizingShout = Ability:Add(1160, false, true)
 DemoralizingShout.buff_duration = 8
 DemoralizingShout.cooldown_duration = 45
@@ -1231,7 +1236,8 @@ local CrushingAdvance = Ability:Add(410138, true, true) -- T30 4pc
 CrushingAdvance.buff_duration = 30
 local EarthenTenacity = Ability:Add(410218, true, true) -- T30 4pc
 EarthenTenacity.buff_duration = 20
-
+local Fervid = Ability:Add(425517, true, true) -- T31 2pc
+Fervid.buff_duration = 10
 -- Racials
 
 -- PvP talents
@@ -1491,6 +1497,7 @@ function Player:UpdateKnown()
 	WhirlwindFury.buff.known = WhirlwindFury.known
 	CrushingAdvance.known = self.spec == SPEC.ARMS and self.set_bonus.t30 >= 4
 	EarthenTenacity.known = self.spec == SPEC.PROTECTION and self.set_bonus.t30 >= 4
+	Fervid.known = self.spec == SPEC.PROTECTION and (self.set_bonus.t31 >= 2 or self.set_bonus.t32 >= 2)
 	VanguardsDetermination.known = self.spec == SPEC.PROTECTION and self.set_bonus.t29 >= 2
 	if IgnorePain.known then
 		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 40) or (self.spec == SPEC.FURY and 60) or 35
@@ -2635,9 +2642,9 @@ end
 APL[SPEC.PROTECTION].defensives = function(self)
 --[[
 actions+=/shield_wall,if=talent.immovable_object.enabled&buff.avatar.down
-actions+=/ignore_pain,if=target.health.pct>=20&(rage.deficit<=15&cooldown.shield_slam.ready|rage.deficit<=40&cooldown.shield_charge.ready&talent.champions_bulwark.enabled|rage.deficit<=20&cooldown.shield_charge.ready|rage.deficit<=30&cooldown.demoralizing_shout.ready&talent.booming_voice.enabled|rage.deficit<=20&cooldown.avatar.ready|rage.deficit<=45&cooldown.demoralizing_shout.ready&talent.booming_voice.enabled&buff.last_stand.up&talent.unnerving_focus.enabled|rage.deficit<=30&cooldown.avatar.ready&buff.last_stand.up&talent.unnerving_focus.enabled|rage.deficit<=20|rage.deficit<=40&cooldown.shield_slam.ready&buff.violent_outburst.up&talent.heavy_repercussions.enabled&talent.impenetrable_wall.enabled|rage.deficit<=55&cooldown.shield_slam.ready&buff.violent_outburst.up&buff.last_stand.up&talent.unnerving_focus.enabled&talent.heavy_repercussions.enabled&talent.impenetrable_wall.enabled|rage.deficit<=17&cooldown.shield_slam.ready&talent.heavy_repercussions.enabled|rage.deficit<=18&cooldown.shield_slam.ready&talent.impenetrable_wall.enabled),use_off_gcd=1
-actions+=/last_stand,if=(target.health.pct>=90&talent.unnerving_focus.enabled|target.health.pct<=20&talent.unnerving_focus.enabled)|talent.bolster.enabled
-actions+=/shield_block,if=buff.shield_block.duration<=18&talent.enduring_defenses.enabled|buff.shield_block.duration<=12
+actions+=/ignore_pain,if=target.health.pct>=20&(rage.deficit<=15&cooldown.shield_slam.ready|rage.deficit<=40&cooldown.shield_charge.ready&talent.champions_bulwark.enabled|rage.deficit<=20&cooldown.shield_charge.ready|rage.deficit<=30&cooldown.demoralizing_shout.ready&talent.booming_voice.enabled|rage.deficit<=20&cooldown.avatar.ready|rage.deficit<=45&cooldown.demoralizing_shout.ready&talent.booming_voice.enabled&buff.last_stand.up&talent.unnerving_focus.enabled|rage.deficit<=30&cooldown.avatar.ready&buff.last_stand.up&talent.unnerving_focus.enabled|rage.deficit<=20|rage.deficit<=40&cooldown.shield_slam.ready&buff.violent_outburst.up&talent.heavy_repercussions.enabled&talent.impenetrable_wall.enabled|rage.deficit<=55&cooldown.shield_slam.ready&buff.violent_outburst.up&buff.last_stand.up&talent.unnerving_focus.enabled&talent.heavy_repercussions.enabled&talent.impenetrable_wall.enabled|rage.deficit<=17&cooldown.shield_slam.ready&talent.heavy_repercussions.enabled|rage.deficit<=18&cooldown.shield_slam.ready&talent.impenetrable_wall.enabled)|(rage>=70|buff.seeing_red.stack=7&rage>=35)&cooldown.shield_slam.remains<=1&buff.shield_block.remains>=4&set_bonus.tier31_2pc,use_off_gcd=1
+actions+=/last_stand,if=(target.health.pct>=90&talent.unnerving_focus.enabled|target.health.pct<=20&talent.unnerving_focus.enabled)|talent.bolster.enabled|set_bonus.tier30_2pc|set_bonus.tier30_4pc
+actions+=/shield_block,if=buff.shield_block.duration<=10
 ]]
 	if self.use_cds and ShieldWall:Usable() and ImmovableObject.known and Avatar:Down() then
 		return UseExtra(ShieldWall)
@@ -2698,7 +2705,7 @@ APL[SPEC.PROTECTION].aoe = function(self)
 --[[
 actions.aoe=thunder_clap,if=dot.rend.remains<=1
 actions.aoe+=/shield_slam,if=(set_bonus.tier30_2pc|set_bonus.tier30_4pc)&spell_targets.thunder_clap<=7|buff.earthen_tenacity.up
-actions.aoe+=/thunder_clap,if=buff.violent_outburst.up&spell_targets.thunderclap>5&buff.avatar.up&talent.unstoppable_force.enabled
+actions.aoe+=/thunder_clap,if=buff.violent_outburst.up&spell_targets.thunderclap>6&buff.avatar.up&talent.unstoppable_force.enabled
 actions.aoe+=/revenge,if=rage>=70&talent.seismic_reverberation.enabled&spell_targets.revenge>=3
 actions.aoe+=/shield_slam,if=rage<=60|buff.violent_outburst.up&spell_targets.thunderclap<=7
 actions.aoe+=/thunder_clap
@@ -2710,11 +2717,14 @@ actions.aoe+=/revenge,if=rage>=30|rage>=40&talent.barbaric_training.enabled
 	if ShieldSlam:Usable() and ((Player.set_bonus.t30 >= 2 and Player.enemies <= 7) or EarthenTenacity:Up()) then
 		return ShieldSlam
 	end
-	if UnstoppableForce.known and ThunderClapProt:Usable() and Player.enemies > 5 and ViolentOutburst:Up() and Avatar:Up() then
+	if UnstoppableForce.known and ThunderClapProt:Usable() and Player.enemies > 6 and ViolentOutburst:Up() and Avatar:Up() then
 		return ThunderClapProt
 	end
 	if SeismicReverbation.known and Revenge:Usable() and Player.rage.current >= 70 and Player.enemies >= 3 then
 		return Revenge
+	end
+	if Fervid.known and ShieldSlam:Usable() and (DeepWoundsProt:Remains() + Rend:Remains() + ThunderousRoar:Remains()) > 24 then
+		return ShieldSlam
 	end
 	if ShieldSlam:Usable() and (Player.rage.current <= 60 or (ViolentOutburst:Up() and Player.enemies <= 7)) then
 		return ShieldSlam
@@ -2730,20 +2740,20 @@ end
 APL[SPEC.PROTECTION].generic = function(self)
 --[[
 actions.generic=shield_slam
-actions.generic+=/thunder_clap,if=dot.rend.remains<=1&buff.violent_outburst.down
+actions.generic+=/thunder_clap,if=dot.rend.remains<=2&buff.violent_outburst.down
 actions.generic+=/execute,if=buff.sudden_death.up&talent.sudden_death.enabled
-actions.generic+=/execute,if=spell_targets.revenge=1&rage>=50
+actions.generic+=/execute
 actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>1|cooldown.shield_slam.remains&!buff.violent_outburst.up)
-actions.generic+=/revenge,if=(rage>=60&target.health.pct>20|buff.revenge.up&target.health.pct<=20&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>20)|(rage>=60&target.health.pct>35|buff.revenge.up&target.health.pct<=35&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>35)&talent.massacre.enabled
-actions.generic+=/execute,if=spell_targets.revenge=1
-actions.generic+=/revenge
+actions.generic+=/revenge,if=(rage>=80&target.health.pct>20|buff.revenge.up&target.health.pct<=20&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>20)|(rage>=80&target.health.pct>35|buff.revenge.up&target.health.pct<=35&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>35)&talent.massacre.enabled
+actions.generic+=/execute
+actions.generic+=/revenge,if=target.health>20
 actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>=1|cooldown.shield_slam.remains&buff.violent_outburst.up)
 actions.generic+=/devastate
 ]]
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if ThunderClapProt:Usable() and Rend:Remains() < 1 and ViolentOutburst:Down() then
+	if ThunderClapProt:Usable() and Rend:Remains() < 2 and ViolentOutburst:Down() then
 		return ThunderClapProt
 	end
 	if SuddenDeath.known and Execute:Usable() and SuddenDeath:Up() then
@@ -2763,15 +2773,15 @@ actions.generic+=/devastate
 	end
 	self.execute_pct = Massacre.known and 35 or 20
 	if Revenge:Usable() and (
-		(Target.health.pct > self.execute_pct and (Player.rage.current >= 60 or Revenge.free:Up())) or
+		(Target.health.pct > self.execute_pct and (Player.rage.current >= 80 or Revenge.free:Up())) or
 		(Target.health.pct <= self.execute_pct and Revenge.free:Up() and Player.rage.current <= 18 and not ShieldSlam:Ready())
 	) then
 		return Revenge
 	end
-	if Execute:Usable() and Player.enemies == 1 then
+	if Execute:Usable() then
 		return Execute
 	end
-	if Revenge:Usable() then
+	if Revenge:Usable() and Target.health.pct > self.execute_pct then
 		return Revenge
 	end
 	if ThunderClapProt:Usable() then

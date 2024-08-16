@@ -1,8 +1,8 @@
-## Interface: 110000
+## Interface: 110002
 ## Title: Smash
 ## Notes: Smash is an addon for warriors that simplifies gameplay and maximizes DPS by doing all the decision making for you
 ## Author: jcadduono @ curseforge.com or Spy#1955 @ BattleTag
 ## SavedVariablesPerCharacter: Smash
-## Version: 11.0.0-1
+## Version: 11.0.2-0
 Smash.xml
 Smash.lua

@@ -261,6 +261,7 @@ local Player = {
 		t30 = 0, -- Irons of the Onyx Crucible
 		t31 = 0, -- Molten Vanguard's Mortarplate
 		t32 = 0, -- Irons of the Onyx Crucible (Awakened)
+		t33 = 0, -- Warsculptor's Masterwork
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -735,10 +736,10 @@ function Ability:FullRechargeTime()
 		end
 		charges = charges - 1
 	end
-	if charges >= max_charges then
+	if charges >= info.maxCharges then
 		return 0
 	end
-	return (max_charges - charges - 1) * info.cooldownDuration + (recharge_time - (Player.ctime - info.cooldownStartTime) - (self.off_gcd and 0 or Player.execute_remains))
+	return (info.maxCharges - charges - 1) * info.cooldownDuration + (info.cooldownDuration - (Player.ctime - info.cooldownStartTime) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:Duration()
@@ -1587,7 +1588,7 @@ end
 
 function Player:Update()
 	local _, cooldown, start, ends, spellId, speed, max_speed, speed_mh, speed_oh
-	self.main =  nil
+	self.main = nil
 	self.cd = nil
 	self.interrupt = nil
 	self.extra = nil
@@ -3484,6 +3485,7 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 	Player.set_bonus.t30 = (Player:Equipped(202441) and 1 or 0) + (Player:Equipped(202442) and 1 or 0) + (Player:Equipped(202443) and 1 or 0) + (Player:Equipped(202444) and 1 or 0) + (Player:Equipped(202446) and 1 or 0)
 	Player.set_bonus.t31 = (Player:Equipped(207180) and 1 or 0) + (Player:Equipped(207181) and 1 or 0) + (Player:Equipped(207182) and 1 or 0) + (Player:Equipped(207183) and 1 or 0) + (Player:Equipped(207185) and 1 or 0)
 	Player.set_bonus.t32 = (Player:Equipped(217216) and 1 or 0) + (Player:Equipped(217217) and 1 or 0) + (Player:Equipped(217218) and 1 or 0) + (Player:Equipped(217219) and 1 or 0) + (Player:Equipped(217220) and 1 or 0)
+	Player.set_bonus.t33 = (Player:Equipped(211982) and 1 or 0) + (Player:Equipped(211983) and 1 or 0) + (Player:Equipped(211984) and 1 or 0) + (Player:Equipped(211985) and 1 or 0) + (Player:Equipped(211987) and 1 or 0)
 
 	Player:ResetSwing(true, true)
 	Player:UpdateKnown()
@@ -3872,7 +3874,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		UI:Reset()
 		return Status('Position has been reset to', 'default')
 	end
-	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
+	print(ADDON, '(version: |cFFFFD000' .. C_AddOns.GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
 	for _, cmd in next, {
 		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
 		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the ' .. ADDON .. ' UI to the Personal Resource Display',

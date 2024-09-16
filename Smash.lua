@@ -1053,7 +1053,6 @@ ChampionsSpear:AutoAoe()
 local ThunderClap = Ability:Add(6343, false, true)
 ThunderClap.buff_duration = 10
 ThunderClap.cooldown_duration = 6
-ThunderClap.rage_cost = 20
 ThunderClap.hasted_cooldown = true
 ThunderClap:AutoAoe(true)
 local ThunderousWords = Ability:Add(384969, false, true)
@@ -1255,7 +1254,25 @@ SeeingRed.buff_duration = 30
 local ViolentOutburst = Ability:Add(386477, true, true, 386478)
 ViolentOutburst.buff_duration = 30
 -- Hero talents
-
+local BurstOfPower = Ability:Add(437118, true, true, 437121)
+BurstOfPower.buff_duration = 15
+BurstOfPower.max_stack = 2
+local ColossalMight = Ability:Add(429634, true, true, 440989)
+ColossalMight.buff_duration = 24
+ColossalMight.max_stack = 5
+local CrashingThunder = Ability:Add(436707, true, true)
+local Demolish = Ability:Add(436358, true, true)
+Demolish.buff_duration = 2
+Demolish.cooldown_duration = 45
+local ThunderBlast = Ability:Add(435222, false, true)
+ThunderBlast.buff_duration = 10
+ThunderBlast.cooldown_duration = 6
+ThunderBlast.hasted_cooldown = true
+ThunderBlast.learn_spellId = 435607
+ThunderBlast:AutoAoe(true)
+ThunderBlast.buff = Ability:Add(435615, true, true)
+ThunderBlast.buff.buff_duration = 15
+ThunderBlast.buff.max_stack = 2
 -- Tier set bonuses
 
 -- Racials
@@ -1514,8 +1531,16 @@ function Player:UpdateKnown()
 	Revenge.free.known = Revenge.known
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
+	ThunderBlast.buff.known = ThunderBlast.known
 	if IgnorePain.known then
 		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 20) or (self.spec == SPEC.FURY and 60) or 35
+	end
+	if self.spec == SPEC.PROTECTION then
+		ThunderClap.rage_cost = 0
+		ThunderBlast.rage_cost = 0
+	else
+		ThunderClap.rage_cost = 20
+		ThunderBlast.rage_cost = 30
 	end
 
 	Abilities:Update()
@@ -1903,6 +1928,17 @@ end
 
 function MartialProwess:Stack()
 	return Overpower:Stack()
+end
+
+function ThunderClap:Usable(...)
+	if ThunderBlast.known and ThunderBlast.buff:Up() then
+		return false
+	end
+	return Ability.Usable(self, ...)
+end
+
+function ThunderBlast:Usable(...)
+	return ThunderBlast.buff:Up() and Ability.Usable(self, ...)
 end
 
 -- End Ability Modifications
@@ -2595,8 +2631,12 @@ actions+=/run_action_list,name=aoe,if=spell_targets.thunder_clap>=3
 actions+=/call_action_list,name=generic
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar:Up())
-	if Opt.defensives and Player:UnderAttack() then
-		self:defensives()
+	if Opt.defensives then
+		if ShieldBlock:Usable() and ShieldBlock:ChargesFractional() >= 1.5 and ShieldBlock:Remains() < 2 then
+			UseExtra(ShieldBlock)
+		elseif Player:UnderAttack() then
+			self:defensives()
+		end
 	end
 	if Player.health.pct < Opt.heal then
 		if VictoryRush:Usable() then
@@ -2604,9 +2644,6 @@ actions+=/call_action_list,name=generic
 		elseif ImpendingVictory:Usable() then
 			UseExtra(ImpendingVictory)
 		end
-	end
-	if self.use_cds then
-		self:cds()
 	end
 	if Player.enemies >= 3 then
 		local apl = self:aoe()
@@ -2645,14 +2682,16 @@ end
 
 APL[SPEC.PROTECTION].cds = function(self)
 --[[
-actions+=/avatar
+actions+=/avatar,if=buff.thunder_blast.down|buff.thunder_blast.stack<=2
 actions+=/ravager
 actions+=/demoralizing_shout,if=talent.booming_voice.enabled
 actions+=/champions_spear
+actions+=/thunder_blast,if=spell_targets.thunder_blast>=2&buff.thunder_blast.stack=2
+actions+=/demolish,if=buff.colossal_might.stack>=3
 actions+=/thunderous_roar
 actions+=/shield_charge
 ]]
-	if Avatar:Usable() then
+	if Avatar:Usable() and (not ThunderBlast.known or ThunderBlast.buff:Stack() <= 2) then
 		return UseCooldown(Avatar)
 	end
 	if Ravager:Usable() then
@@ -2664,6 +2703,12 @@ actions+=/shield_charge
 	if ChampionsSpear:Usable() then
 		return UseCooldown(ChampionsSpear)
 	end
+	if ThunderBlast:Usable() and Player.enemies >= 2 and ThunderBlast.buff:Stack() >= 2 then
+		return ThunderBlast
+	end
+	if Demolish:Usable() and (not ColossalMight.known or ColossalMight:Stack() >= 3) then
+		return UseCooldown(Demolish)
+	end
 	if ThunderousRoar:Usable() then
 		return UseCooldown(ThunderousRoar)
 	end
@@ -2674,66 +2719,106 @@ end
 
 APL[SPEC.PROTECTION].aoe = function(self)
 --[[
-actions.aoe=thunder_clap,if=dot.rend.remains<=1
-actions.aoe+=/shield_slam,if=(set_bonus.tier30_2pc|set_bonus.tier30_4pc)&spell_targets.thunder_clap<=7|buff.earthen_tenacity.up
-actions.aoe+=/thunder_clap,if=buff.violent_outburst.up&spell_targets.thunderclap>6&buff.avatar.up&talent.unstoppable_force.enabled
+actions.aoe=thunder_blast,if=dot.rend.remains<=1
+actions.aoe+=/thunder_clap,if=dot.rend.remains<=1
+actions.aoe+=/thunder_blast,if=buff.violent_outburst.up&spell_targets.thunderclap>=2&buff.avatar.up&talent.unstoppable_force.enabled
+actions.aoe+=/thunder_clap,if=buff.violent_outburst.up&spell_targets.thunderclap>=4&buff.avatar.up&talent.unstoppable_force.enabled&talent.crashing_thunder.enabled|buff.violent_outburst.up&spell_targets.thunderclap>6&buff.avatar.up&talent.unstoppable_force.enabled
 actions.aoe+=/revenge,if=rage>=70&talent.seismic_reverberation.enabled&spell_targets.revenge>=3
-actions.aoe+=/shield_slam,if=rage<=60|buff.violent_outburst.up&spell_targets.thunderclap<=7
+actions.aoe+=/shield_slam,if=rage<=60|buff.violent_outburst.up&spell_targets.thunderclap<=4&talent.crashing_thunder.enabled
+actions.aoe+=/thunder_blast
 actions.aoe+=/thunder_clap
 actions.aoe+=/revenge,if=rage>=30|rage>=40&talent.barbaric_training.enabled
 ]]
+	if ThunderBlast:Usable() and (Rend:Remains() < 1 or ThunderBlast.buff:Remains() < (Player.gcd * 2)) then
+		return ThunderBlast
+	end
 	if ThunderClap:Usable() and Rend:Remains() < 1 then
 		return ThunderClap
 	end
-	if UnstoppableForce.known and ThunderClap:Usable() and Player.enemies > 6 and ViolentOutburst:Up() and Avatar:Up() then
-		return ThunderClap
+	if self.use_cds then
+		local apl = self:cds()
+		if apl then return apl end
+	end
+	if UnstoppableForce.known and ViolentOutburst.known then
+		if ThunderBlast:Usable() and Avatar:Up() and Player.enemies >= 2 and ViolentOutburst:Up() then
+			return ThunderBlast
+		end
+		if ThunderClap:Usable() and Avatar:Up() and ViolentOutburst:Up() and Player.enemies >= (CrashingThunder.known and 4 or 7) then
+			return ThunderClap
+		end
 	end
 	if SeismicReverbation.known and Revenge:Usable() and Player.rage.current >= 70 and Player.enemies >= 3 then
 		return Revenge
 	end
-	if ShieldSlam:Usable() and (Player.rage.current <= 60 or (ViolentOutburst:Up() and Player.enemies <= 7)) then
+	if ShieldSlam:Usable() and (
+		Player.rage.current <= 60 or
+		(CrashingThunder.known and ViolentOutburst.known and Player.enemies <= 4 and ViolentOutburst:Up())
+	) then
 		return ShieldSlam
+	end
+	if ThunderBlast:Usable() then
+		return ThunderBlast
 	end
 	if ThunderClap:Usable() then
 		return ThunderClap
 	end
-	if Revenge:Usable() and Player.rage.current >= 30 then
+	if Revenge:Usable() and (
+		Revenge:Free() or
+		Player.rage.current >= (BarbaricTrainingProt.known and 40 or 30)
+	) then
 		return Revenge
 	end
 end
 
 APL[SPEC.PROTECTION].generic = function(self)
 --[[
-actions.generic=shield_slam
+actions.generic=thunder_blast,if=(buff.thunder_blast.stack=2&buff.burst_of_power.stack<=1&buff.avatar.up&talent.unstoppable_force.enabled)
+actions.generic+=/shield_slam,if=(buff.burst_of_power.stack=2&buff.thunder_blast.stack<=1|buff.violent_outburst.up)|rage<=70&talent.demolish.enabled
+actions.generic+=/execute,if=rage>=70|(rage>=40&cooldown.shield_slam.remains&talent.demolish.enabled|rage>=50&cooldown.shield_slam.remains)|buff.sudden_death.up&talent.sudden_death.enabled
+actions.generic+=/shield_slam
+actions.generic+=/thunder_blast,if=dot.rend.remains<=2&buff.violent_outburst.down
+actions.generic+=/thunder_blast
 actions.generic+=/thunder_clap,if=dot.rend.remains<=2&buff.violent_outburst.down
-actions.generic+=/execute,if=buff.sudden_death.up&talent.sudden_death.enabled
-actions.generic+=/execute
+actions.generic+=/thunder_blast,if=(spell_targets.thunder_clap>1|cooldown.shield_slam.remains&!buff.violent_outburst.up)
 actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>1|cooldown.shield_slam.remains&!buff.violent_outburst.up)
 actions.generic+=/revenge,if=(rage>=80&target.health.pct>20|buff.revenge.up&target.health.pct<=20&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>20)|(rage>=80&target.health.pct>35|buff.revenge.up&target.health.pct<=35&rage<=18&cooldown.shield_slam.remains|buff.revenge.up&target.health.pct>35)&talent.massacre.enabled
 actions.generic+=/execute
-actions.generic+=/revenge,if=target.health>20
+actions.generic+=/revenge
+actions.generic+=/thunder_blast,if=(spell_targets.thunder_clap>=1|cooldown.shield_slam.remains&buff.violent_outburst.up)
 actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>=1|cooldown.shield_slam.remains&buff.violent_outburst.up)
 actions.generic+=/devastate
 ]]
+	if UnstoppableForce.known and ThunderBlast:Usable() and Avatar:Up() and ThunderBlast.buff:Stack() >= 2 and BurstOfPower:Stack() <= 1 then
+		return ThunderBlast
+	end
+	if self.use_cds then
+		local apl = self:cds()
+		if apl then return apl end
+	end
+	if ShieldSlam:Usable() and (
+		(Demolish.known and Player.rage.current <= 70) or
+		(ThunderBlast.known and BurstOfPower.known and BurstOfPower:Stack() >= 2 and ThunderBlast.buff:Stack() <= 1) or
+		(ViolentOutburst.known and ViolentOutburst:Up())
+	) then
+		return ShieldSlam
+	end
+	if Execute:Usable() and (
+		Player.rage.current >= 70 or
+		(SuddenDeath.known and SuddenDeath:Up()) or
+		(Player.rage.current >= (Demolish.known and 40 or 50) and not ShieldSlam:Ready())
+	) then
+		return Execute
+	end
 	if ShieldSlam:Usable() then
 		return ShieldSlam
 	end
-	if ThunderClap:Usable() and Rend:Remains() < 2 and ViolentOutburst:Down() then
-		return ThunderClap
+	if ThunderBlast:Usable() then
+		return ThunderBlast
 	end
-	if SuddenDeath.known and Execute:Usable() and SuddenDeath:Up() then
-		return Execute
-	end
-	if Execute:Usable() and Player.enemies == 1 and (Massacre.known or Juggernaut.known) and Player.rage.current >= 50 then
-		return Execute
-	end
-	if Revenge:Usable() and Player.rage.current >= 40 then
-		return Revenge
-	end
-	if Execute:Usable() and Player.enemies == 1 and Player.rage.current >= 50 then
-		return Execute
-	end
-	if ThunderClap:Usable() and (Player.enemies > 1 or (not ShieldSlam:Ready() and ViolentOutburst:Down())) then
+	if ThunderClap:Usable() and (
+		Player.enemies > 1 or
+		(ViolentOutburst:Down() and (Rend:Remains() < 2 or not ShieldSlam:Ready()))
+	) then
 		return ThunderClap
 	end
 	self.execute_pct = Massacre.known and 35 or 20
@@ -2746,7 +2831,7 @@ actions.generic+=/devastate
 	if Execute:Usable() then
 		return Execute
 	end
-	if Revenge:Usable() and Target.health.pct > self.execute_pct then
+	if Revenge:Usable() then
 		return Revenge
 	end
 	if ThunderClap:Usable() then

@@ -72,7 +72,6 @@ Smash = {}
 local Opt -- use this as a local table reference to Smash
 
 SLASH_Smash1, SLASH_Smash2 = '/smash', '/sm'
-BINDING_HEADER_SMASH = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
@@ -160,7 +159,7 @@ local Abilities = {
 	bySpellId = {},
 	velocity = {},
 	autoAoe = {},
-	trackAuras = {},
+	tracked = {},
 }
 
 -- methods for target tracking / aoe modes
@@ -169,6 +168,9 @@ local AutoAoe = {
 	blacklist = {},
 	ignored_units = {},
 }
+
+-- methods for tracking ticking debuffs on targets
+local TrackedAuras = {}
 
 -- timers for updating combat/display/hp info
 local Timer = {
@@ -257,10 +259,6 @@ local Player = {
 		last_taken = 0,
 	},
 	set_bonus = {
-		t29 = 0, -- Stones of the Walking Mountain
-		t30 = 0, -- Irons of the Onyx Crucible
-		t31 = 0, -- Molten Vanguard's Mortarplate
-		t32 = 0, -- Irons of the Onyx Crucible (Awakened)
 		t33 = 0, -- Warsculptor's Masterwork
 	},
 	previous_gcd = {},-- list of previous GCD abilities
@@ -298,6 +296,14 @@ Target.Dummies = {
 	[194649] = true,
 	[197833] = true,
 	[198594] = true,
+	[219250] = true,
+	[225983] = true,
+	[225984] = true,
+	[225985] = true,
+	[225976] = true,
+	[225977] = true,
+	[225978] = true,
+	[225982] = true,
 }
 
 -- Start AoE
@@ -524,6 +530,10 @@ function Ability:Remains()
 	return 0
 end
 
+function Ability:React()
+	return self:Remains()
+end
+
 function Ability:Expiring(seconds)
 	local remains = self:Remains()
 	return remains > 0 and remains < (seconds or Player.gcd)
@@ -685,12 +695,20 @@ function Ability:Stack()
 	return 0
 end
 
+function Ability:MaxStack()
+	return self.max_stack
+end
+
 function Ability:Cost()
 	return self.rage_cost
 end
 
 function Ability:Gain()
 	return self.rage_gain
+end
+
+function Ability:Free()
+	return self.rage_cost > 0 and self:Cost() == 0
 end
 
 function Ability:WontCapRage(reduction)
@@ -892,10 +910,8 @@ end
 
 -- Start DoT tracking
 
-local trackAuras = {}
-
-function trackAuras:Purge()
-	for _, ability in next, Abilities.trackAuras do
+function TrackedAuras:Purge()
+	for _, ability in next, Abilities.tracked do
 		for guid, aura in next, ability.aura_targets do
 			if aura.expires <= Player.time then
 				ability:RemoveAura(guid)
@@ -904,13 +920,13 @@ function trackAuras:Purge()
 	end
 end
 
-function trackAuras:Remove(guid)
-	for _, ability in next, Abilities.trackAuras do
+function TrackedAuras:Remove(guid)
+	for _, ability in next, Abilities.tracked do
 		ability:RemoveAura(guid)
 	end
 end
 
-function Ability:TrackAuras()
+function Ability:Track()
 	self.aura_targets = {}
 end
 
@@ -1069,7 +1085,7 @@ local DeepWounds = Ability:Add(262111, false, true, 262115)
 DeepWounds.buff_duration = 12
 DeepWounds.tick_interval = 3
 DeepWounds.hasted_ticks = true
-DeepWounds:TrackAuras()
+DeepWounds:Track()
 local DieByTheSword = Ability:Add(118038, true, true)
 DieByTheSword.buff_duration = 8
 DieByTheSword.cooldown_duration = 180
@@ -1124,7 +1140,7 @@ Rend.rage_cost = 20
 Rend.buff_duration = 15
 Rend.tick_interval = 3
 Rend.hasted_ticks = true
-Rend:TrackAuras()
+Rend:Track()
 local SharpenedBlades = Ability:Add(383341, false, true)
 local Skullsplitter = Ability:Add(260643, false, true, 427040)
 Skullsplitter.buff_duration = 10
@@ -1189,7 +1205,7 @@ local DeepWoundsProt = Ability:Add(115768, false, true, 115767)
 DeepWoundsProt.buff_duration = 15
 DeepWoundsProt.tick_interval = 3
 DeepWoundsProt.hasted_ticks = true
-DeepWoundsProt:TrackAuras()
+DeepWoundsProt:Track()
 local DemoralizingShout = Ability:Add(1160, false, true)
 DemoralizingShout.buff_duration = 8
 DemoralizingShout.cooldown_duration = 45
@@ -1236,28 +1252,18 @@ local UnnervingFocus = Ability:Add(337154, true, true)
 ------ Procs
 local SeeingRed = Ability:Add(386486, true, true)
 SeeingRed.buff_duration = 30
-local VanguardsDetermination = Ability:Add(394056, true, true)
-VanguardsDetermination.buff_duration = 5
 local ViolentOutburst = Ability:Add(386477, true, true, 386478)
 ViolentOutburst.buff_duration = 30
+-- Hero talents
+
 -- Tier set bonuses
-local CrushingAdvance = Ability:Add(410138, true, true) -- T30 4pc
-CrushingAdvance.buff_duration = 30
-local EarthenTenacity = Ability:Add(410218, true, true) -- T30 4pc
-EarthenTenacity.buff_duration = 20
-local Fervid = Ability:Add(425517, true, true) -- T31 2pc
-Fervid.buff_duration = 10
+
 -- Racials
 
 -- PvP talents
 
 -- Trinket effects
-local MarkOfFyralath = Ability:Add(414532, false, true) -- DoT applied by Fyr'alath the Dreamrender
-MarkOfFyralath.buff_duration = 15
-MarkOfFyralath.tick_interval = 3
-MarkOfFyralath.hasted_ticks = true
-MarkOfFyralath.no_pandemic = true
-MarkOfFyralath:TrackAuras()
+
 -- Class cooldowns
 local PowerInfusion = Ability:Add(10060, true)
 PowerInfusion.buff_duration = 20
@@ -1330,13 +1336,11 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-
+local Healthstone = InventoryItem:Add(5512)
+Healthstone.max_charges = 3
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
-local FyralathTheDreamrender = InventoryItem:Add(206448)
-FyralathTheDreamrender.cooldown_duration = 120
-FyralathTheDreamrender.off_gcd = false
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1345,7 +1349,7 @@ function Abilities:Update()
 	wipe(self.bySpellId)
 	wipe(self.velocity)
 	wipe(self.autoAoe)
-	wipe(self.trackAuras)
+	wipe(self.tracked)
 	for _, ability in next, self.all do
 		if ability.known then
 			self.bySpellId[ability.spellId] = ability
@@ -1359,7 +1363,7 @@ function Abilities:Update()
 				self.autoAoe[#self.autoAoe + 1] = ability
 			end
 			if ability.aura_targets then
-				self.trackAuras[#self.trackAuras + 1] = ability
+				self.tracked[#self.tracked + 1] = ability
 			end
 		end
 	end
@@ -1510,14 +1514,9 @@ function Player:UpdateKnown()
 	Revenge.free.known = Revenge.known
 	Victorious.known = VictoryRush.known or ImpendingVictory.known
 	WhirlwindFury.buff.known = WhirlwindFury.known
-	CrushingAdvance.known = self.spec == SPEC.ARMS and self.set_bonus.t30 >= 4
-	EarthenTenacity.known = self.spec == SPEC.PROTECTION and self.set_bonus.t30 >= 4
-	Fervid.known = self.spec == SPEC.PROTECTION and (self.set_bonus.t31 >= 2 or self.set_bonus.t32 >= 2)
-	VanguardsDetermination.known = self.spec == SPEC.PROTECTION and self.set_bonus.t29 >= 2
 	if IgnorePain.known then
 		IgnorePain.rage_cost = (self.spec == SPEC.ARMS and 20) or (self.spec == SPEC.FURY and 60) or 35
 	end
-	MarkOfFyralath.known = FyralathTheDreamrender:Equipped()
 
 	Abilities:Update()
 
@@ -1629,7 +1628,7 @@ function Player:Update()
 	self.movement_speed = max_speed / 7 * 100
 	self:UpdateThreat()
 
-	trackAuras:Purge()
+	TrackedAuras:Purge()
 	if Opt.auto_aoe then
 		for _, ability in next, Abilities.autoAoe do
 			ability:UpdateTargetsHit()
@@ -1682,7 +1681,7 @@ function Target:UpdateHealth(reset)
 		table.remove(self.health.history, 1)
 		self.health.history[25] = self.health.current
 	end
-	self.timeToDieMax = self.health.current / Player.health.max * 10
+	self.timeToDieMax = self.health.current / Player.health.max * (15 + (Player.spec == SPEC.PROTECTION and 5 or 0))
 	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
 	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
 	self.timeToDie = (
@@ -1774,18 +1773,18 @@ function Execute:Cost()
 	return Ability.Cost(self)
 end
 
-function Execute:Usable()
+function Execute:Usable(...)
 	if (not SuddenDeath.known or not SuddenDeath:Up()) and Target.health.pct >= (Massacre.known and 35 or 20) then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
-function ExecuteFury:Usable()
+function ExecuteFury:Usable(...)
 	if (not SuddenDeathFury.known or not SuddenDeathFury:Up()) and Target.health.pct >= (Massacre.known and 35 or 20) then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
 function Whirlwind:Cost()
@@ -1845,18 +1844,18 @@ function Revenge:Cost()
 	return max(0, cost)
 end
 
-function VictoryRush:Usable()
+function VictoryRush:Usable(...)
 	if Victorious:Down() then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
-function StormBolt:Usable()
+function StormBolt:Usable(...)
 	if not Target.stunnable then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
 function DeepWounds:Duration()
@@ -1904,12 +1903,6 @@ end
 
 function MartialProwess:Stack()
 	return Overpower:Stack()
-end
-
-function MarkOfFyralath:Refresh(guid)
-	if self.known and self.aura_targets[guid] then
-		self.aura_targets[guid].expires = Player.time + self.buff_duration
-	end
 end
 
 -- End Ability Modifications
@@ -2146,13 +2139,7 @@ actions.single_target+=/wrecking_throw
 	if Player.enemies > 1 and SweepingStrikes:Usable() and SweepingStrikes:Down() then
 		UseCooldown(SweepingStrikes)
 	end
-	if Execute:Usable() and (
-		(Juggernaut.known and Juggernaut:Up() and Juggernaut:Remains() < Player.gcd) or
-		(SuddenDeath:Up() and (
-			(Player.set_bonus.t31 >= 2 and DeepWounds:Up()) or
-			(Player.set_bonus.t31 >= 4 and Rend:Down())
-		))
-	) then
+	if Juggernaut.known and Execute:Usable() and Juggernaut:Up() and Juggernaut:Remains() < Player.gcd then
 		return Execute
 	end
 	if ThunderousRoar:Usable() then
@@ -2267,13 +2254,8 @@ actions.aoe+=/wrecking_throw
 	if CollateralDamage.known and Whirlwind:Usable() and CollateralDamage:Up() and SweepingStrikes:Ready(3) then
 		return Whirlwind
 	end
-	if Rend.known and (Rend:Refreshable() or Rend:Ticking() < Player.enemies) then
-		if Player.set_bonus.t31 >= 4 and Execute:Usable() and SuddenDeath:Up() then
-			return Execute
-		end
-		if ThunderClap:Usable() then
-			return ThunderClap
-		end
+	if Rend.known and ThunderClap:Usable() and (Rend:Refreshable() or Rend:Ticking() < Player.enemies) then
+		return ThunderClap
 	end
 	if SweepingStrikes:Usable() and SweepingStrikes:Down() and (
 		not Bladestorm.known or
@@ -2287,9 +2269,6 @@ actions.aoe+=/wrecking_throw
 	end
 	if self.colossus:Usable() then
 		UseCooldown(self.colossus)
-	end
-	if Player.set_bonus.t31 >= 4 and Execute:Usable() and SuddenDeath:Up() then
-		return Execute
 	end
 	if Cleave:Usable() and MartialProwess:Stack() >= 2 then
 		return Cleave
@@ -2349,8 +2328,7 @@ actions.aoe+=/wrecking_throw
 	if MortalStrike:Usable() and (
 		Player.enemies < 3 or
 		ExecutionersPrecision:Stack() >= 2 or
-		DeepWounds:Remains() < Player.gcd or
-		(CrushingAdvance.known and CrushingAdvance:Stack() >= 3)
+		DeepWounds:Remains() < Player.gcd
 	) then
 		return MortalStrike
 	end
@@ -2382,19 +2360,14 @@ end
 
 APL[SPEC.ARMS].trinkets = function(self)
 --[[
-actions.trinkets=use_item,name=fyralath_the_dreamrender,,if=dot.mark_of_fyralath.ticking&!talent.blademasters_torment|dot.mark_of_fyralath.ticking&cooldown.avatar.remains>3&cooldown.bladestorm.remains>3&!debuff.colossus_smash.up
-actions.trinkets+=/use_item,use_off_gcd=1,name=algethar_puzzle_box,if=cooldown.avatar.remains<=3
 # Trinkets The trinket with the highest estimated value, will be used first and paired with Avatar.
-actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket1,if=variable.trinket_1_buffs&!variable.trinket_1_manual&(!buff.avatar.up&trinket.1.cast_time>0|!trinket.1.cast_time>0)&buff.avatar.up&(variable.trinket_2_exclude|!trinket.2.has_cooldown|trinket.2.cooldown.remains|variable.trinket_priority=1)|trinket.1.proc.any_dps.duration>=fight_remains
+actions.trinkets=use_item,use_off_gcd=1,slot=trinket1,if=variable.trinket_1_buffs&!variable.trinket_1_manual&(!buff.avatar.up&trinket.1.cast_time>0|!trinket.1.cast_time>0)&buff.avatar.up&(variable.trinket_2_exclude|!trinket.2.has_cooldown|trinket.2.cooldown.remains|variable.trinket_priority=1)|trinket.1.proc.any_dps.duration>=fight_remains
 actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket2,if=variable.trinket_2_buffs&!variable.trinket_2_manual&(!buff.avatar.up&trinket.2.cast_time>0|!trinket.2.cast_time>0)&buff.avatar.up&(variable.trinket_1_exclude|!trinket.1.has_cooldown|trinket.1.cooldown.remains|variable.trinket_priority=2)|trinket.2.proc.any_dps.duration>=fight_remains
 # If only one on use trinket provides a buff, use the other on cooldown. Or if neither trinket provides a buff, use both on cooldown.
 actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket1,if=!variable.trinket_1_buffs&!variable.trinket_1_manual&(!variable.trinket_1_buffs&(trinket.2.cooldown.remains|!variable.trinket_2_buffs)|(trinket.1.cast_time>0&!buff.avatar.up|!trinket.1.cast_time>0)|cooldown.avatar.remains_expected>20)
 actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket2,if=!variable.trinket_2_buffs&!variable.trinket_2_manual&(!variable.trinket_2_buffs&(trinket.1.cooldown.remains|!variable.trinket_1_buffs)|(trinket.2.cast_time>0&!buff.avatar.up|!trinket.2.cast_time>0)|cooldown.avatar.remains_expected>20)
-actions.trinkets+=/use_item,use_off_gcd=1,slot=main_hand,if=!equipped.fyralath_the_dreamrender&(!variable.trinket_1_buffs|trinket.1.cooldown.remains)&(!variable.trinket_2_buffs|trinket.2.cooldown.remains)
+actions.trinkets+=/use_item,use_off_gcd=1,slot=main_hand,if=(!variable.trinket_1_buffs|trinket.1.cooldown.remains)&(!variable.trinket_2_buffs|trinket.2.cooldown.remains)
 ]]
-	if FyralathTheDreamrender:Usable() and MarkOfFyralath:Ticking() >= Player.enemies and (not BlademastersTorment.known or (not Avatar:Ready(3) and (not Bladestorm.known or not Bladestorm:Ready(3)) and ColossusSmash.debuff:Down())) then
-		return UseCooldown(FyralathTheDreamrender)
-	end
 	if Opt.trinket then
 		if Trinket1:Usable() and (Avatar:Up() or (Target.boss and Target.timeToDie < 21)) then
 			return UseCooldown(Trinket1)
@@ -2661,7 +2634,6 @@ actions+=/shield_block,if=buff.shield_block.duration<=10
 	if self.use_cds and LastStand:Usable() and (
 		Player.health.pct < 20 or
 		Bolster.known or
-		EarthenTenacity.known or
 		(UnnervingFocus.known and (Target.health.pct >= 90 or Target.health.pct <= 20))
 	) then
 		return UseExtra(LastStand)
@@ -2713,17 +2685,11 @@ actions.aoe+=/revenge,if=rage>=30|rage>=40&talent.barbaric_training.enabled
 	if ThunderClap:Usable() and Rend:Remains() < 1 then
 		return ThunderClap
 	end
-	if ShieldSlam:Usable() and ((Player.set_bonus.t30 >= 2 and Player.enemies <= 7) or EarthenTenacity:Up()) then
-		return ShieldSlam
-	end
 	if UnstoppableForce.known and ThunderClap:Usable() and Player.enemies > 6 and ViolentOutburst:Up() and Avatar:Up() then
 		return ThunderClap
 	end
 	if SeismicReverbation.known and Revenge:Usable() and Player.rage.current >= 70 and Player.enemies >= 3 then
 		return Revenge
-	end
-	if Fervid.known and ShieldSlam:Usable() and (DeepWoundsProt:Remains() + Rend:Remains() + ThunderousRoar:Remains()) > 24 then
-		return ShieldSlam
 	end
 	if ShieldSlam:Usable() and (Player.rage.current <= 60 or (ViolentOutburst:Up() and Player.enemies <= 7)) then
 		return ShieldSlam
@@ -2761,7 +2727,7 @@ actions.generic+=/devastate
 	if Execute:Usable() and Player.enemies == 1 and (Massacre.known or Juggernaut.known) and Player.rage.current >= 50 then
 		return Execute
 	end
-	if Revenge:Usable() and VanguardsDetermination:Down() and Player.rage.current >= 40 then
+	if Revenge:Usable() and Player.rage.current >= 40 then
 		return Revenge
 	end
 	if Execute:Usable() and Player.enemies == 1 and Player.rage.current >= 50 then
@@ -3072,7 +3038,7 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, text_center, text_cd
+	local border, dim, dim_cd, text_cd, text_center
 	local channel = Player.channel
 
 	if Opt.dimmer then
@@ -3152,7 +3118,7 @@ function UI:UpdateCombat()
 
 	if Player.main then
 		smashPanel.icon:SetTexture(Player.main.icon)
-		Player.main_freecast = (Player.main.rage_cost > 0 and Player.main:Cost() == 0) or (Player.main.Free and Player.main:Free())
+		Player.main_freecast = Player.main:Free()
 	end
 	if Player.cd then
 		smashCooldownPanel.icon:SetTexture(Player.cd.icon)
@@ -3273,7 +3239,7 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	if not uid or Target.Dummies[uid] then
 		return
 	end
-	trackAuras:Remove(dstGUID)
+	TrackedAuras:Remove(dstGUID)
 	if Opt.auto_aoe then
 		AutoAoe:Remove(dstGUID)
 	end
@@ -3285,7 +3251,6 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 		if Opt.auto_aoe then
 			AutoAoe:Add(dstGUID, true)
 		end
-		MarkOfFyralath:Refresh(dstGUID)
 	elseif dstGUID == Player.guid then
 		Player.swing.last_taken = Player.time
 		if Opt.auto_aoe then
@@ -3315,7 +3280,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and Abilities.bySpellId[spellId]
 	if not ability then
-		--log(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--log(format('%.3f EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', Player.time, event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -3349,9 +3314,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	end
 	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event, missType)
-		if MarkOfFyralath.known and event ~= 'SPELL_MISSED' then
-			MarkOfFyralath:Refresh(dstGUID)
-		end
 	end
 end
 
@@ -3481,10 +3443,6 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 		end
 	end
 
-	Player.set_bonus.t29 = (Player:Equipped(200423) and 1 or 0) + (Player:Equipped(200425) and 1 or 0) + (Player:Equipped(200426) and 1 or 0) + (Player:Equipped(200427) and 1 or 0) + (Player:Equipped(200428) and 1 or 0)
-	Player.set_bonus.t30 = (Player:Equipped(202441) and 1 or 0) + (Player:Equipped(202442) and 1 or 0) + (Player:Equipped(202443) and 1 or 0) + (Player:Equipped(202444) and 1 or 0) + (Player:Equipped(202446) and 1 or 0)
-	Player.set_bonus.t31 = (Player:Equipped(207180) and 1 or 0) + (Player:Equipped(207181) and 1 or 0) + (Player:Equipped(207182) and 1 or 0) + (Player:Equipped(207183) and 1 or 0) + (Player:Equipped(207185) and 1 or 0)
-	Player.set_bonus.t32 = (Player:Equipped(217216) and 1 or 0) + (Player:Equipped(217217) and 1 or 0) + (Player:Equipped(217218) and 1 or 0) + (Player:Equipped(217219) and 1 or 0) + (Player:Equipped(217220) and 1 or 0)
 	Player.set_bonus.t33 = (Player:Equipped(211982) and 1 or 0) + (Player:Equipped(211983) and 1 or 0) + (Player:Equipped(211984) and 1 or 0) + (Player:Equipped(211985) and 1 or 0) + (Player:Equipped(211987) and 1 or 0)
 
 	Player:ResetSwing(true, true)

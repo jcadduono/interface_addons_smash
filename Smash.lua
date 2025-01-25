@@ -1025,6 +1025,8 @@ local AngerManagement = Ability:Add(152278, false, true)
 local Avatar = Ability:Add({107574, 401150}, true, true)
 Avatar.buff_duration = 20
 Avatar.cooldown_duration = 90
+Avatar.remains = 0
+Avatar.active = false
 local BlademastersTorment = Ability:Add(390138, false, true)
 local UnstoppableForce = Ability:Add(275336, false, true)
 local DefensiveStance = Ability:Add(386208, true, true)
@@ -1678,6 +1680,9 @@ function Player:Update()
 		AutoAoe:Purge()
 	end
 
+	Avatar.remains = Avatar:Remains()
+	Avatar.active = Avatar.remains > 0
+
 	self.main = APL[self.spec]:Main()
 
 	if self.channel.interrupt_if then
@@ -2039,7 +2044,7 @@ actions+=/run_action_list,name=hac,if=raid_event.adds.exists|active_enemies>2
 actions+=/call_action_list,name=execute,target_if=min:target.health.pct,if=(talent.massacre.enabled&target.health.pct<35)|target.health.pct<20
 actions+=/run_action_list,name=single_target,if=!raid_event.adds.exists
 ]]
-	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar:Up())
+	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar.active)
 	if Player.health.pct < Opt.heal then
 		if VictoryRush:Usable() then
 			UseExtra(VictoryRush)
@@ -2129,7 +2134,7 @@ actions.execute+=/wrecking_throw
 	end
 	if ThunderousRoar:Usable() and (
 		(TestOfMight.known and Player.rage.current < 40) or
-		(not TestOfMight.known and Player.rage.current < 70 and (Avatar:Up() and ColossusSmash.debuff:Up()))
+		(not TestOfMight.known and Player.rage.current < 70 and (Avatar.active and ColossusSmash.debuff:Up()))
 	) then
 		UseCooldown(ThunderousRoar)
 	end
@@ -2427,10 +2432,10 @@ actions.trinkets+=/use_item,use_off_gcd=1,slot=trinket2,if=!variable.trinket_2_b
 actions.trinkets+=/use_item,use_off_gcd=1,slot=main_hand,if=(!variable.trinket_1_buffs|trinket.1.cooldown.remains)&(!variable.trinket_2_buffs|trinket.2.cooldown.remains)
 ]]
 	if Opt.trinket then
-		if Trinket1:Usable() and (Avatar:Up() or (Target.boss and Target.timeToDie < 21)) then
+		if Trinket1:Usable() and (Avatar.active or (Target.boss and Target.timeToDie < 21)) then
 			return UseCooldown(Trinket1)
 		end
-		if Trinket2:Usable() and (Avatar:Up() or (Target.boss and Target.timeToDie < 21)) then
+		if Trinket2:Usable() and (Avatar.active or (Target.boss and Target.timeToDie < 21)) then
 			return UseCooldown(Trinket2)
 		end
 	end
@@ -2496,7 +2501,7 @@ actions+=/bag_of_tricks,if=buff.recklessness.down&debuff.siegebreaker.down&buff.
 actions+=/call_action_list,name=aoe
 actions+=/call_action_list,name=single_target
 ]]
-	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar:Up())
+	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar.active)
 	self.execute_phase = Target.health.pct < (Massacre.known and 35 or 20) or (Condemn.known and Target.health.pct > 80)
 	--self.unique_legendaries = SignetOfTormentedKings.known or SinfulSurge.known  or ElysianMight.known
 	self.bladestorm_condition = self.use_cds and (Rampage:Previous() or Enrage:Remains() > (Player.gcd * 2.5))
@@ -2652,7 +2657,7 @@ actions+=/potion,if=buff.avatar.up|buff.avatar.up&target.health.pct<=20
 actions+=/run_action_list,name=aoe,if=spell_targets.thunder_clap>=3
 actions+=/call_action_list,name=generic
 ]]
-	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar:Up())
+	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (Avatar.known and Avatar.active)
 	if Opt.defensives then
 		if ShieldBlock:Usable() and ShieldBlock:ChargesFractional() >= 1.5 and ShieldBlock:Remains() < 2 then
 			UseExtra(ShieldBlock)
@@ -2681,7 +2686,7 @@ actions+=/ignore_pain,if=target.health.pct>=20&(rage.deficit<=15&cooldown.shield
 actions+=/last_stand,if=(target.health.pct>=90&talent.unnerving_focus.enabled|target.health.pct<=20&talent.unnerving_focus.enabled)|talent.bolster.enabled|set_bonus.tier30_2pc|set_bonus.tier30_4pc
 actions+=/shield_block,if=buff.shield_block.duration<=10
 ]]
-	if self.use_cds and ShieldWall:Usable() and ImmovableObject.known and Avatar:Down() then
+	if self.use_cds and ShieldWall:Usable() and ImmovableObject.known and not Avatar.active then
 		return UseExtra(ShieldWall)
 	end
 	if ShieldBlock:Usable() and ShieldBlock:Remains() < 2 then
@@ -2762,10 +2767,10 @@ actions.aoe+=/revenge,if=rage>=30|rage>=40&talent.barbaric_training.enabled
 		if apl then return apl end
 	end
 	if UnstoppableForce.known and ViolentOutburst.known then
-		if ThunderBlast:Usable() and Avatar:Up() and Player.enemies >= 2 and ViolentOutburst:Up() then
+		if ThunderBlast:Usable() and Avatar.active and Player.enemies >= 2 and ViolentOutburst:Up() then
 			return ThunderBlast
 		end
-		if ThunderClap:Usable() and Avatar:Up() and ViolentOutburst:Up() and Player.enemies >= (CrashingThunder.known and 4 or 7) then
+		if ThunderClap:Usable() and Avatar.active and ViolentOutburst:Up() and Player.enemies >= (CrashingThunder.known and 4 or 7) then
 			return ThunderClap
 		end
 	end
@@ -2810,7 +2815,7 @@ actions.generic+=/thunder_blast,if=(spell_targets.thunder_clap>=1|cooldown.shiel
 actions.generic+=/thunder_clap,if=(spell_targets.thunder_clap>=1|cooldown.shield_slam.remains&buff.violent_outburst.up)
 actions.generic+=/devastate
 ]]
-	if UnstoppableForce.known and ThunderBlast:Usable() and Avatar:Up() and ThunderBlast.buff:Stack() >= 2 and BurstOfPower:Stack() <= 1 then
+	if UnstoppableForce.known and ThunderBlast:Usable() and Avatar.active and ThunderBlast.buff:Stack() >= 2 and BurstOfPower:Stack() <= 1 then
 		return ThunderBlast
 	end
 	if self.use_cds then
@@ -3278,7 +3283,7 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, text_center, text_tr, text_cd_center, text_cd_tr
+	local border, dim, dim_cd, text_center, text_tr, text_bl, text_cd_center, text_cd_tr
 	local channel = Player.channel
 
 	if Opt.dimmer then
@@ -3350,6 +3355,9 @@ function UI:UpdateDisplay()
 				dim = false
 			end
 		end
+	end
+	if Avatar.active then
+		text_bl = format('%.1fs', Avatar.remains)
 	end
 	if border ~= smashPanel.border.overlay then
 		smashPanel.border.overlay = border

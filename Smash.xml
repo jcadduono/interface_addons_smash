@@ -1,0 +1,216 @@
+<?xml version="1.0"?>
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ http://wowprogramming.com/FrameXML/UI.xsd">
+	<Frame name="smashPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Anchors>
+			<Anchor point="CENTER" relativeTo="UIParent" relativePoint="CENTER" x="0" y="-169"/>
+		</Anchors>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Smash\border.blp" setAllPoints="true" hidden="true"/>
+			</Layer>
+			<Layer level="BORDER">
+				<Texture parentKey="dimmer" setAllPoints="true" hidden="true">
+					<Color r="0.0" g="0.0" b="0.0" a="0.6"/>
+				</Texture>
+			</Layer>
+		</Layers>
+		<Frames>
+			<Cooldown parentKey="swipe" inherits="CooldownFrameTemplate" drawEdge="false" drawBling="false" setAllPoints="true"/>
+			<Frame parentKey="text" setAllPoints="true">
+				<Layers>
+					<Layer level="OVERLAY">
+						<FontString parentKey="tl" justifyV="TOP" justifyH="LEFT" inherits="Game12Font_o1">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="TOPLEFT" x="3" y="-4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="tr" justifyV="TOP" justifyH="RIGHT" inherits="NumberFontNormalGray" wordwrap="false">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="TOPRIGHT" x="-3" y="-4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="bl" justifyV="BOTTOM" justifyH="LEFT" inherits="Game12Font_o1">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="BOTTOMLEFT" x="3" y="4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="br" justifyV="BOTTOM" justifyH="RIGHT" inherits="Game12Font_o1">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="BOTTOMRIGHT" x="-3" y="4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="center" justifyV="MIDDLE" justifyH="CENTER" inherits="Game11Font_o1" setAllPoints="true">
+							<Size x="60" y="60"/>
+						</FontString>
+					</Layer>
+				</Layers>
+			</Frame>
+			<Button parentKey="button" setAllPoints="true" registerForClicks="LeftButtonDown, RightButtonDown, MiddleButtonDown" hidden="true"/>
+		</Frames>
+	</Frame>
+
+	<Frame name="smashPreviousPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Smash\border.blp" setAllPoints="true"/>
+			</Layer>
+		</Layers>
+	</Frame>
+
+	<Frame name="smashCooldownPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Smash\border.blp" setAllPoints="true"/>
+			</Layer>
+			<Layer level="BORDER">
+				<Texture parentKey="dimmer" setAllPoints="true" hidden="true">
+					<Color r="0.0" g="0.0" b="0.0" a="0.6"/>
+				</Texture>
+			</Layer>
+		</Layers>
+		<Frames>
+			<Cooldown parentKey="swipe" inherits="CooldownFrameTemplate" drawEdge="false" drawBling="false" setAllPoints="true"/>
+			<Frame parentKey="text" setAllPoints="true">
+				<Layers>
+					<Layer level="OVERLAY">
+						<FontString parentKey="tl" justifyV="TOP" justifyH="LEFT" inherits="Game12Font_o1">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="TOPLEFT" x="3" y="-4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="tr" justifyV="TOP" justifyH="RIGHT" inherits="NumberFontNormalGray" wordwrap="false">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="TOPRIGHT" x="-3" y="-4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="bl" justifyV="BOTTOM" justifyH="LEFT" inherits="Game12Font_o1">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="BOTTOMLEFT" x="3" y="4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="br" justifyV="BOTTOM" justifyH="RIGHT" inherits="Game12Font_o1">
+							<Size x="60" y="60"/>
+							<Anchors>
+								<Anchor point="BOTTOMRIGHT" x="-3" y="4"/>
+							</Anchors>
+						</FontString>
+						<FontString parentKey="center" justifyV="MIDDLE" justifyH="CENTER" inherits="Game11Font_o1" setAllPoints="true">
+							<Size x="60" y="60"/>
+						</FontString>
+					</Layer>
+				</Layers>
+			</Frame>
+		</Frames>
+	</Frame>
+
+	<Frame name="smashInterruptPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Smash\border.blp" setAllPoints="true"/>
+			</Layer>
+		</Layers>
+		<Frames>
+			<Cooldown parentKey="swipe" inherits="CooldownFrameTemplate" drawEdge="false" drawBling="false" setAllPoints="true"/>
+		</Frames>
+	</Frame>
+
+	<Frame name="smashExtraPanel" enableMouse="true" movable="true" parent="UIParent" frameStrata="BACKGROUND" hidden="true">
+		<Size x="64" y="64"/>
+		<Scripts>
+			<OnLoad>
+				self:RegisterForDrag('LeftButton', 'RightButton')
+			</OnLoad>
+			<OnDragStart>
+				self:StartMoving()
+			</OnDragStart>
+			<OnDragStop>
+				self:StopMovingOrSizing()
+			</OnDragStop>
+		</Scripts>
+		<Layers>
+			<Layer level="BACKGROUND">
+				<Texture parentKey="icon" setAllPoints="true">
+					<TexCoords left="0.05" right="0.95" top="0.05" bottom="0.95"/>
+				</Texture>
+			</Layer>
+			<Layer level="ARTWORK">
+				<Texture parentKey="border" file="Interface\AddOns\Smash\border.blp" setAllPoints="true"/>
+			</Layer>
+		</Layers>
+	</Frame>
+</Ui>

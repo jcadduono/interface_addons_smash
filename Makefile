@@ -6,7 +6,7 @@ ZIP := $(NAME)_$(VERSION).zip
 
 FILES := *.toc *.lua *.xml *.blp
 
-PREFIX ?= /media/classic-wow-addons
+PREFIX ?= /media/wow-addons-anniversary
 
 all: $(ZIP)
 

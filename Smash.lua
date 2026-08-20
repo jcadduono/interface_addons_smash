@@ -981,6 +981,7 @@ BattleStance.cooldown_duration = 1
 BattleStance.is_stance = true
 local Charge = Ability:Add({100, 6178, 11578}, false, true)
 Charge.cooldown_duration = 15
+Charge.triggers_combat = true
 Charge.stun = Ability:Add({7922})
 Charge.stun.buff_duration = 1
 local HeroicStrike = Ability:Add({78, 284, 285, 1608, 11564, 11565, 11566, 11567, 25286, 29707, 30324}, false, true)
@@ -1138,7 +1139,8 @@ local SunderArmor = Ability:Add({7386, 7405, 8380, 11596, 11597, 25225}) -- Appl
 SunderArmor.buff_duration = 30
 SunderArmor.rage_cost = 15
 -- Trinket Effects
-
+local FieryWeapon = Ability:Add({13897}, false, true)
+FieryWeapon.bonus_id = 803
 -- End Abilities
 
 -- Start Inventory Items
@@ -1424,7 +1426,10 @@ function Player:TimeInCombat()
 	if self.combat_start > 0 then
 		return self.time - self.combat_start
 	end
-	if self.cast.ability and self.cast.ability.triggers_combat then
+	if (
+		(self.cast.ability and self.cast.ability.triggers_combat) or
+		(self.previous_gcd[1] and self.previous_gcd[1].triggers_combat and self.previous_gcd[1]:UsedWithin(Player.gcd))
+	) then
 		return 0.1
 	end
 	return 0
@@ -1926,7 +1931,7 @@ local function UseExtra(ability, overwrite)
 end
 
 local function Pool(ability, extra)
-	Player.pool_rage = min(Player.rage.max, ability:Rage() + (extra or 0))
+	Player.pool_rage = min(Player.rage.max, ability:Cost() + (extra or 0))
 	return ability
 end
 
@@ -2232,6 +2237,9 @@ APL.Buffs = function(self, remains)
 			end
 		end
 	end
+	if Bloodrage:Usable() and Player.rage.current < 10 and Player:TimeInCombat() == 0 and Player.last_shout:Remains() < min(30, remains) then
+		return Bloodrage
+	end
 end
 
 APL.Struggle = function(self)
@@ -2245,6 +2253,9 @@ APL.Struggle = function(self)
 		) then
 			return ThunderClap
 		end
+	end
+	if FieryWeapon.known and Hamstring:Usable() then
+		return Hamstring
 	end
 	if not Devastate.known and SunderArmor:Usable() and (Player.rage.current >= 60 or (SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5) or (Player.rage.current >= 26 and SunderArmor:Stack() < 5)) then
 		return SunderArmor

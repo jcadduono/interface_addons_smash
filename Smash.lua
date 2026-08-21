@@ -971,6 +971,7 @@ local Bloodrage = Ability:Add({2687}, true, false)
 Bloodrage.cooldown_duration = 60
 Bloodrage.buff = Ability:Add({29131}, true, true)
 Bloodrage.buff.buff_duration = 10
+Bloodrage.buff.tick_interval = 1
 local Pummel = Ability:Add({6552, 6554}, false, true)
 Pummel.buff_duration = 4
 Pummel.cooldown_duration = 10
@@ -1014,6 +1015,8 @@ ThunderClap.cooldown_duration = 4
 ThunderClap.rage_cost = 20
 ThunderClap:AutoAoe(false)
 ------ Talents
+local AngerManagement = Ability:Add({12296}, true, true)
+AngerManagement.tick_interval = 3
 local DeathWish = Ability:Add({12292}, true, true)
 DeathWish.buff_duration = 30
 DeathWish.cooldown_duration = 180
@@ -1025,6 +1028,10 @@ local ImprovedThunderClap = Ability:Add({12287, 12665, 12666}, false, true)
 local MortalStrike = Ability:Add({12294, 21551, 21552, 21553, 25248, 30330}, false, true)
 MortalStrike.rage_cost = 30
 MortalStrike.cooldown_duration = 6
+local SecondWind = Ability:Add({29834, 29838}, true, true)
+SecondWind.buff = Ability:Add({29841, 29842}, true, true)
+SecondWind.buff.buff_duration = 10
+SecondWind.buff.tick_interval = 2
 ------ Procs
 
 ---- Fury
@@ -1522,11 +1529,17 @@ function Player:UpdateKnown()
 		end
 	end
 
+	Bloodrage.buff.known = Bloodrage.known
 	Intercept.stun.known = Intercept.known
 	if Rampage.known then
 		Rampage.buff.known = true
 		Rampage.buff.spellId = Rampage.buff.spellIds[Rampage.rank]
 		Rampage.buff.rank = Rampage.rank
+	end
+	if SecondWind.known then
+		SecondWind.buff.known = true
+		SecondWind.buff.spellId = SecondWind.buff.spellIds[SecondWind.rank]
+		SecondWind.buff.rank = SecondWind.rank
 	end
 	Slam.use = Slam.known and ImprovedSlam.known and Player.equipped.twohand
 
@@ -1836,6 +1849,10 @@ function ThunderClap:Cost()
 	return max(0, cost)
 end
 
+function ThunderClap:Available()
+	return Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE
+end
+
 function Execute:Cost()
 	local cost = Ability.Cost(self)
 	if ImprovedExecute.known then
@@ -1848,7 +1865,10 @@ function Execute:Cost()
 end
 
 function Execute:Available()
-	return Target.health.pct < 20
+	return (
+		(Player.stance == STANCE.BATTLE or Player.stance == STANCE.BERSERKER) and
+		Target.health.pct < 20
+	)
 end
 
 function Bloodthirst:Cost()
@@ -1876,11 +1896,22 @@ function Whirlwind:Cost()
 end
 
 function Charge:Available()
-	return Player:TimeInCombat() == 0
+	return Player.stance == STANCE.BATTLE and Player:TimeInCombat() == 0
 end
 
 function Rend:Available()
-	return not (Target.creature_type == 'Mechanical' or Target.creature_type == 'Elemental')
+	return (
+		(Player.stance == STANCE.BATTLE or Player.stance == STANCE.BERSERKER) and
+		not (Target.creature_type == 'Mechanical' or Target.creature_type == 'Elemental')
+	)
+end
+
+function Revenge:Available()
+	return Player.stance == STANCE.DEFENSIVE
+end
+
+function Overpower:Available()
+	return Player.stance == STANCE.BATTLE
 end
 
 function VictoryRush:React()
@@ -1901,6 +1932,10 @@ function SweepingStrikes:CastSuccess(...)
 	end
 end
 
+function SweepingStrikes:Available()
+	return Player.stance == STANCE.BATTLE or Player.stance == STANCE.BERSERKER
+end
+
 function Slam:CastLanded(dstGUID, event)
 	Ability.CastLanded(self, dstGUID, event)
 	Player:ResetSwing(true, true, event == 'SPELL_MISSED', false)
@@ -1912,10 +1947,19 @@ function Slam:FirstInSwing()
 end
 
 function ShieldBlock:Available()
+	return Player.stance == STANCE.DEFENSIVE and Player.equipped.shield
+end
+
+function ShieldBash:Available()
+	return (
+		(Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE) and
+		Player.equipped.shield
+	)
+end
+
+function ShieldSlam:Available()
 	return Player.equipped.shield
 end
-ShieldBash.Available = ShieldBlock.Available
-ShieldSlam.Available = ShieldBlock.Available
 
 -- End Ability Modifications
 
@@ -1952,7 +1996,10 @@ APL[STANCE.BATTLE].Main = function(self)
 		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 2) and Bloodthirst:Cost() or 0) +
 		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 2) and ShieldSlam:Cost() or 0) +
 		(Overpower.known and Player:UnderMeleeAttack() and Overpower:Ready(Player.gcd * 2) and Overpower:Cost() or 0) +
-		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 2) and SweepingStrikes:Cost() or 0)
+		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 2) and SweepingStrikes:Cost() or 0) +
+		(AngerManagement.known and -1 or 0) +
+		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
+		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
 	)
 	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
@@ -1995,14 +2042,10 @@ APL[STANCE.BATTLE].Main = function(self)
 	if SweepingStrikes:Usable(0.5, true) and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
 	end
-	if Player.enemies > 1 then
-		if Cleave:Usable() and Player.rage.current >= (self.rage_pool_amount + Cleave:Cost()) then
-			UseCooldown(Cleave)
-		end
-	else
-		if HeroicStrike:Usable() and Player.rage.current >= (self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
-			UseCooldown(HeroicStrike)
-		end
+	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (30 + self.rage_pool_amount + Cleave:Cost()) then
+		UseCooldown(Cleave)
+	elseif HeroicStrike:Usable() and (not Cleave.known or Player.enemies < 2) and Player.rage.current >= (30 + self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
+		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
 		return VictoryRush
@@ -2023,14 +2066,16 @@ APL[STANCE.BATTLE].Main = function(self)
 		if Execute:Usable() then
 			return Execute
 		end
-	end
-	if VictoryRush:Usable() and not Slam.wait then
-		return VictoryRush
+		if VictoryRush:Usable() then
+			return VictoryRush
+		end
 	end
 	if Slam.use and Slam:Usable() and Player.enemies == 1 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
 		return Slam
 	end
-	return APL:Struggle()
+	if not Slam.wait then
+		return APL:Struggle()
+	end
 end
 
 APL[STANCE.DEFENSIVE].Main = function(self)
@@ -2038,7 +2083,10 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 2) and MortalStrike:Cost() or 0) +
 		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 2) and Bloodthirst:Cost() or 0) +
 		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 2) and ShieldSlam:Cost() or 0) +
-		(Revenge.known and Player:UnderMeleeAttack() and Revenge:Ready(Player.gcd * 2) and Revenge:Cost() or 0)
+		(Revenge.known and Player:UnderMeleeAttack() and Revenge:Ready(Player.gcd * 2) and Revenge:Cost() or 0) +
+		(AngerManagement.known and -1 or 0) +
+		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
+		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
 	)
 	Slam.wait = false
 	if Player:TimeInCombat() == 0 then
@@ -2054,7 +2102,7 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 		local apl = APL:Buffs(10)
 		if apl then UseExtra(apl) end
 	end
-	if ShieldBlock:Usable() and Player.rage.current >= 27 and Player:UnderMeleeAttack(true) and ShieldBlock:Down() then
+	if ShieldBlock:Usable() and Player.rage.current >= (self.rage_pool_amount + ShieldBlock:Cost()) and Player:UnderMeleeAttack(true) and ShieldBlock:Down() then
 		UseCooldown(ShieldBlock)
 	end
 	if Taunt:Usable() and Player.threat.status < 3 and UnitAffectingCombat('target') then
@@ -2066,14 +2114,10 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	) then
 		UseCooldown(Bloodrage)
 	end
-	if Player.enemies > 1 then
-		if Cleave:Usable() and Player.rage.current >= (self.rage_pool_amount + Cleave:Cost()) then
-			UseCooldown(Cleave)
-		end
-	else
-		if HeroicStrike:Usable() and Player.rage.current >= (self.rage_pool_amount + HeroicStrike:Cost()) then
-			UseCooldown(HeroicStrike)
-		end
+	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (20 + self.rage_pool_amount + Cleave:Cost()) then
+		UseCooldown(Cleave)
+	elseif HeroicStrike:Usable() and (not Cleave.known or Player.enemies < 2) and Player.rage.current >= (20 + self.rage_pool_amount + HeroicStrike:Cost()) then
+		UseCooldown(HeroicStrike)
 	end
 	if SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(2) and Player.rage.current <= 30 then
 		UseExtra(BattleStance)
@@ -2097,8 +2141,8 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 		return Pool(ShieldSlam)
 	end
 	if ThunderClap:Usable(0.5, true) and (
-		(ImprovedThunderClap.rank >= 3 and Player.enemies > 1) or
-		ThunderClap:Remains() < 1
+		(ImprovedThunderClap.rank >= 3 and Player.enemies > (1 + (Cleave.known and 1 or 0))) or
+		ThunderClap:Remains() < 2
 	) then
 		return Pool(ThunderClap)
 	end
@@ -2123,7 +2167,10 @@ APL[STANCE.BERSERKER].Main = function(self)
 		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 2) and Bloodthirst:Cost() or 0) +
 		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 2) and ShieldSlam:Cost() or 0) +
 		(Whirlwind.known and Whirlwind:Ready(Player.gcd * 2) and Whirlwind:Cost() or 0) +
-		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 2) and SweepingStrikes:Cost() or 0)
+		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 2) and SweepingStrikes:Cost() or 0) +
+		(AngerManagement.known and -1 or 0) +
+		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
+		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
 	)
 	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
@@ -2163,14 +2210,10 @@ APL[STANCE.BERSERKER].Main = function(self)
 	if SweepingStrikes:Usable(0.5, true) and Player.enemies > 1 then
 		UseCooldown(SweepingStrikes)
 	end
-	if Player.enemies > 1 then
-		if Cleave:Usable() and Player.rage.current >= (self.rage_pool_amount + Cleave:Cost()) then
-			UseCooldown(Cleave)
-		end
-	else
-		if HeroicStrike:Usable() and Player.rage.current >= (self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
-			UseCooldown(HeroicStrike)
-		end
+	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (30 + self.rage_pool_amount + Cleave:Cost()) then
+		UseCooldown(Cleave)
+	elseif HeroicStrike:Usable() and (not Cleave.known or Player.enemies < 2) and Player.rage.current >= (30 + self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
+		UseCooldown(HeroicStrike)
 	end
 	if VictoryRush:Usable() and VictoryRush:React() < Player.gcd then
 		return VictoryRush
@@ -2264,22 +2307,25 @@ end
 
 APL.Struggle = function(self)
 	self.rage_pool_amount = APL[Player.stance].rage_pool_amount
-	if not Slam.use and Player.stance ~= STANCE.BERSERKER then
-		if Rend:Usable() and Player.enemies == 1 and Rend:Down() and Player.rage.current >= (self.rage_pool_amount + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then
-			return Rend
-		end
-		if ThunderClap:Usable() and (
-				(Player.rage.current >= (self.rage_pool_amount + ThunderClap:Cost() + (Cleave.known and Cleave:Cost() or 0)) and Player.enemies >= (3 - (ImprovedThunderClap.rank >= 3 and 1 or 0))) or
-				(Player.rage.current >= (self.rage_pool_amount + ThunderClap:Cost()) and Player:UnderMeleeAttack() and ThunderClap:Remains() < 1)
-		) then
-			return ThunderClap
-		end
+	if ThunderClap:Usable() and Player.rage.current >= (self.rage_pool_amount + ThunderClap:Cost()) and (
+		(ImprovedThunderClap.rank >= 3 and (Player.enemies >= (2 + (Cleave.known and 1 or 0)) or (Player:UnderMeleeAttack() and ThunderClap:Remains() < 2))) or
+		(Player.enemies >= (4 - (ImprovedThunderClap.rank >= 3 and 2 or 0)) and Player.rage.current >= (self.rage_pool_amount + ThunderClap:Cost() + (Cleave.known and Cleave:Cost() or 0)))
+	) then
+		return ThunderClap
 	end
 	if not Devastate.known and SunderArmor:Usable() and ((SunderArmor:Stack() >= 3 and SunderArmor:Remains() < min(5, Target.timeToDie)) or (Target.timeToDie > 12 and Player.rage.current >= (self.rage_pool_amount + SunderArmor:Cost()) and not SunderArmor:Capped())) then
 		return SunderArmor
 	end
 	if FieryWeapon.known and Hamstring:Usable() and Player.rage.current >= (self.rage_pool_amount + Hamstring:Cost()) then
 		return Hamstring
+	end
+	if Rend:Usable() and Player.enemies == 1 and Rend:Down() and Player.rage.current >= (self.rage_pool_amount + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then
+		return Rend
+	end
+	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (self.rage_pool_amount + Cleave:Cost()) then
+		UseCooldown(Cleave)
+	elseif HeroicStrike:Usable() and (not Cleave.known or Player.enemies < 2) and Player.rage.current >= (self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
+		UseCooldown(HeroicStrike)
 	end
 	if Attack:Usable() and not Attack:Active() then
 		return Attack

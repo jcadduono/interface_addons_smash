@@ -2996,6 +2996,10 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 	Player:UpdateKnown()
 end
 
+function Events:SPELLS_CHANGED()
+	Player:UpdateKnown()
+end
+
 function Events:SPELL_UPDATE_COOLDOWN()
 	if Opt.spell_swipe then
 		local _, cooldown, castStart, castEnd

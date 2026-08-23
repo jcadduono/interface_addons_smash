@@ -1901,7 +1901,7 @@ end
 
 function Rend:Available()
 	return (
-		(Player.stance == STANCE.BATTLE or Player.stance == STANCE.BERSERKER) and
+		(Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE) and
 		not (Target.creature_type == 'Mechanical' or Target.creature_type == 'Elemental')
 	)
 end

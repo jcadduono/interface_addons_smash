@@ -1024,6 +1024,7 @@ DeathWish.rage_cost = 10
 local DeepWounds = Ability:Add({12834, 12849, 12867}, false, true)
 DeepWounds.buff_duration = 12
 local ImprovedHeroicStrike = Ability:Add({12282, 12663, 12664}, false, true)
+local ImprovedRend = Ability:Add({12286, 12658, 12659}, false, true)
 local ImprovedThunderClap = Ability:Add({12287, 12665, 12666}, false, true)
 local MortalStrike = Ability:Add({12294, 21551, 21552, 21553, 25248, 30330}, false, true)
 MortalStrike.rage_cost = 30
@@ -2018,9 +2019,6 @@ APL[STANCE.BATTLE].Main = function(self)
 	if DefensiveStance.known and Player.equipped.shield and (Player.enemies == 1 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
 		UseExtra(DefensiveStance)
 	end
-	if BerserkerStance.known and not Player.equipped.shield and Player.rage.current < 30 then
-		UseCooldown(BerserkerStance)
-	end
 	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:Cost() + Whirlwind:Cost())) then
 		return Slam
 	end
@@ -2072,6 +2070,9 @@ APL[STANCE.BATTLE].Main = function(self)
 	end
 	if Slam.use and Slam:Usable() and Player.enemies == 1 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
 		return Slam
+	end
+	if BerserkerStance:Usable() and Whirlwind.known and not Player.equipped.shield and Player.rage.current < self.rage_pool_amount and Whirlwind:Ready(2) and Overpower:React() == 0 then
+		UseCooldown(BerserkerStance)
 	end
 	if not Slam.wait then
 		return APL:Struggle()
@@ -2269,6 +2270,9 @@ APL[STANCE.BERSERKER].Main = function(self)
 	if Slam.use and Slam:Usable() and Player.enemies == 1 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
 		return Slam
 	end
+	if BattleStance:Usable() and Player.rage.current < self.rage_pool_amount and Overpower:React() > 2 then
+		UseCooldown(BattleStance)
+	end
 	return APL:Struggle()
 end
 
@@ -2296,7 +2300,10 @@ APL.Buffs = function(self, remains)
 		self.ds_mine = DemoralizingShout:Remains(true)
 		self.ds_remains = self.ds_mine > 0 and self.ds_mine or max(DemoralizingShout:Remains(), DemoralizingRoar:Remains(), CurseOfWeakness:Remains())
 		self.ds_mine = self.ds_mine > 0
-		if DemoralizingShout:Usable() and Player.rage.current >= (self.rage_pool_amount + DemoralizingShout:Cost()) and (self.ds_remains == 0 or (self.ds_mine and self.ds_remains < 5)) then
+		if DemoralizingShout:Usable() and Player.rage.current >= (self.rage_pool_amount + DemoralizingShout:Cost()) and (
+			(self.ds_remains == 0 and (Player.equipped.shield or Player.stance == STANCE.DEFENSIVE or Player:UnderMeleeAttack())) or
+			(self.ds_mine and self.ds_remains < 5)
+		) then
 			return DemoralizingShout
 		end
 	end
@@ -2319,7 +2326,7 @@ APL.Struggle = function(self)
 	if FieryWeapon.known and Hamstring:Usable() and Player.rage.current >= (self.rage_pool_amount + Hamstring:Cost()) then
 		return Hamstring
 	end
-	if Rend:Usable() and Player.enemies == 1 and Rend:Down() and Player.rage.current >= (self.rage_pool_amount + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then
+	if ImprovedRend.known and Rend:Usable() and (not Cleave.known or Player.enemies < 2) and Rend:Down() and Player.rage.current >= (self.rage_pool_amount + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then
 		return Rend
 	end
 	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (self.rage_pool_amount + Cleave:Cost()) then

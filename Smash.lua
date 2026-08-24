@@ -1997,11 +1997,11 @@ end
 
 APL[STANCE.BATTLE].Main = function(self)
 	self.rage_pool_amount = max(10,
-		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 2) and MortalStrike:Cost() or 0) +
-		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 2) and Bloodthirst:Cost() or 0) +
-		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 2) and ShieldSlam:Cost() or 0) +
-		(Overpower.known and Player:UnderMeleeAttack() and Overpower:Ready(Player.gcd * 2) and Overpower:Cost() or 0) +
-		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 2) and SweepingStrikes:Cost() or 0) +
+		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 3) and MortalStrike:Cost() or 0) +
+		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 3) and Bloodthirst:Cost() or 0) +
+		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
+		(Overpower.known and Player:UnderMeleeAttack() and Overpower:Ready(Player.gcd * 3) and Overpower:Cost() or 0) +
+		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 3) and SweepingStrikes:Cost() or 0) +
 		(AngerManagement.known and -1 or 0) +
 		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
 		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
@@ -2074,10 +2074,10 @@ end
 
 APL[STANCE.DEFENSIVE].Main = function(self)
 	self.rage_pool_amount = max(10,
-		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 2) and MortalStrike:Cost() or 0) +
-		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 2) and Bloodthirst:Cost() or 0) +
-		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 2) and ShieldSlam:Cost() or 0) +
-		(Revenge.known and Player:UnderMeleeAttack() and Revenge:Ready(Player.gcd * 2) and Revenge:Cost() or 0) +
+		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 3) and MortalStrike:Cost() or 0) +
+		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 3) and Bloodthirst:Cost() or 0) +
+		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
+		(Revenge.known and Player:UnderMeleeAttack() and Revenge:Ready(Player.gcd * 3) and Revenge:Cost() or 0) +
 		(AngerManagement.known and -1 or 0) +
 		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
 		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
@@ -2152,11 +2152,11 @@ end
 
 APL[STANCE.BERSERKER].Main = function(self)
 	self.rage_pool_amount = max(10,
-		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 2) and MortalStrike:Cost() or 0) +
-		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 2) and Bloodthirst:Cost() or 0) +
-		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 2) and ShieldSlam:Cost() or 0) +
-		(Whirlwind.known and Whirlwind:Ready(Player.gcd * 2) and Whirlwind:Cost() or 0) +
-		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 2) and SweepingStrikes:Cost() or 0) +
+		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 3) and MortalStrike:Cost() or 0) +
+		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 3) and Bloodthirst:Cost() or 0) +
+		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
+		(Whirlwind.known and Whirlwind:Ready(Player.gcd * 3) and Whirlwind:Cost() or 0) +
+		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 3) and SweepingStrikes:Cost() or 0) +
 		(AngerManagement.known and -1 or 0) +
 		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
 		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)

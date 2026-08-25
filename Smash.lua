@@ -142,6 +142,7 @@ local function InitOpts()
 		cd_ttd = 8,
 		pot = false,
 		trinket = true,
+		preferred_stance = false,
 		swing_timer = true,
 		cshout = true,
 		slam_min_speed = 1.9,
@@ -1134,6 +1135,7 @@ ShieldSlam.rage_cost = 20
 ShieldSlam.cooldown_duration = 6
 local FocusedRage = Ability:Add({29787, 29790, 29792}, false, true)
 local ImprovedSunderArmor = Ability:Add({12308, 12810, 12811}, false, true)
+local TacticalMastery = Ability:Add({12295, 12676, 12677}, false, true)
 ------ Procs
 
 -- Racials
@@ -1496,6 +1498,10 @@ function Player:InArenaOrBattleground()
 	return self.instance == 'arena' or self.instance == 'pvp'
 end
 
+function Player:InPreferredStance()
+	return self.stance == self.preferred_stance
+end
+
 function Player:UpdateTime(timeStamp)
 	self.ctime = GetTime()
 	if timeStamp then
@@ -1511,7 +1517,7 @@ function Player:UpdateKnown()
 	for _, ability in next, Abilities.all do
 		ability.known = false
 		ability.spellId = ability.spellIds[1]
-		ability.rank = 1
+		ability.rank = 0
 		for i, spellId in next, ability.spellIds do
 			if IsPlayerSpell(spellId) then
 				ability.known = true
@@ -1545,7 +1551,19 @@ function Player:UpdateKnown()
 		SecondWind.buff.spellId = SecondWind.buff.spellIds[SecondWind.rank]
 		SecondWind.buff.rank = SecondWind.rank
 	end
-	Slam.use = Slam.known and ImprovedSlam.known and Player.equipped.twohand
+	Slam.use = Slam.known and ImprovedSlam.known and self.equipped.twohand
+
+	if Opt.preferred_stance then
+		self.preferred_stance = Opt.preferred_stance
+	else
+		if DefensiveStance.known and self.equipped.shield then
+			self.preferred_stance = STANCE.DEFENSIVE
+		elseif BerserkerStance.known and Whirlwind.known then
+			self.preferred_stance = STANCE.BERSERKER
+		else
+			self.preferred_stance = STANCE.BATTLE
+		end
+	end
 
 	-- Mark specific spells as known if they can be triggered by others
 	self.last_shout = self.last_shout or BattleShout
@@ -1681,7 +1699,7 @@ function Player:Init()
 	Events:UNIT_MAXPOWER('player')
 	Events:ACTIONBAR_PAGE_CHANGED()
 	Target:Update()
-	Player:Update()
+	self:Update()
 end
 
 -- End Player Functions
@@ -1931,6 +1949,10 @@ function ConcussionBlow:Available()
 	return Target.stunnable and not Target:Stunned()
 end
 
+function Pummel:Available()
+	return Player.stance == STANCE.BERSERKER
+end
+
 function SweepingStrikes:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 	if Opt.auto_aoe and Player.target_mode < 2 then
@@ -1967,6 +1989,10 @@ function ShieldSlam:Available()
 	return Player.equipped.shield
 end
 
+function TacticalMastery:RageRetain()
+	return 10 + (5 * self.rank)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1996,10 +2022,10 @@ APL[STANCE.NONE].Main = function(self)
 end
 
 APL[STANCE.BATTLE].Main = function(self)
-	self.rage_pool_amount = max(10,
+	self.rage_pool_amount = max(Player:InPreferredStance() and 10 or 0,
 		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 3) and MortalStrike:Cost() or 0) +
 		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 3) and Bloodthirst:Cost() or 0) +
-		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
+		(ShieldSlam.known and ShieldSlam:Available() and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
 		(Overpower.known and Player:UnderMeleeAttack() and Overpower:Ready(Player.gcd * 3) and Overpower:Cost() or 0) +
 		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 3) and SweepingStrikes:Cost() or 0) +
 		(AngerManagement.known and -1 or 0) +
@@ -2009,7 +2035,7 @@ APL[STANCE.BATTLE].Main = function(self)
 	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(self.rage_pool_amount, Target.boss and 180 or 30)
-		if apl then return apl end
+		if apl then UseCooldown(apl) end
 		if Charge:Usable() then
 			return Charge
 		end
@@ -2020,10 +2046,11 @@ APL[STANCE.BATTLE].Main = function(self)
 	if Overpower:Usable() then
 		return Overpower
 	end
-	if DefensiveStance.known and Player.equipped.shield and (Player.enemies == 1 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
-		UseExtra(DefensiveStance)
-	end
-	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:Cost() + Whirlwind:Cost())) then
+	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (
+		Player.enemies < 2 or
+		not Whirlwind:Usable() or
+		Player.rage.current > (Slam:Cost() + Whirlwind:Cost())
+	) then
 		return Slam
 	end
 	APL:Cooldowns(self.rage_pool_amount)
@@ -2061,11 +2088,15 @@ APL[STANCE.BATTLE].Main = function(self)
 			return VictoryRush
 		end
 	end
-	if Slam.use and Slam:Usable() and Player.enemies == 1 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
+	if Slam.use and Slam:Usable() and Player.enemies < 2 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
 		return Slam
 	end
-	if BerserkerStance:Usable() and Whirlwind.known and not Player.equipped.shield and Player.rage.current < (self.rage_pool_amount + 10) and Whirlwind:Ready(2) and Overpower:React() == 0 then
-		UseCooldown(BerserkerStance)
+	if Player.rage.current <= (TacticalMastery:RageRetain() + 5) and Overpower:React() == 0 then
+		if DefensiveStance:Usable() and Player.preferred_stance == STANCE.DEFENSIVE and (Player.enemies < 2 or not SweepingStrikes.known or not SweepingStrikes:Ready()) then
+			UseCooldown(DefensiveStance)
+		elseif BerserkerStance:Usable() and Player.preferred_stance == STANCE.BERSERKER then
+			UseCooldown(BerserkerStance)
+		end
 	end
 	if not Slam.wait then
 		return APL:Struggle(self.rage_pool_amount)
@@ -2073,10 +2104,10 @@ APL[STANCE.BATTLE].Main = function(self)
 end
 
 APL[STANCE.DEFENSIVE].Main = function(self)
-	self.rage_pool_amount = max(10,
+	self.rage_pool_amount = max(Player:InPreferredStance() and 10 or 0,
 		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 3) and MortalStrike:Cost() or 0) +
 		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 3) and Bloodthirst:Cost() or 0) +
-		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
+		(ShieldSlam.known and ShieldSlam:Available() and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
 		(Revenge.known and Player:UnderMeleeAttack() and Revenge:Ready(Player.gcd * 3) and Revenge:Cost() or 0) +
 		(AngerManagement.known and -1 or 0) +
 		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
@@ -2085,7 +2116,7 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	Slam.wait = false
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(self.rage_pool_amount, Target.boss and 180 or 30)
-		if apl then return apl end
+		if apl then UseCooldown(apl) end
 		if Charge:Ready(2) and Player.rage.current < 30 then
 			UseExtra(BattleStance)
 		end
@@ -2141,6 +2172,13 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	if MortalStrike:Usable(0, true) then
 		return MortalStrike
 	end
+	if Player.rage.current <= (TacticalMastery:RageRetain() + 5) and Revenge:React() == 0 then
+		if BattleStance:Usable() and Player.preferred_stance == STANCE.BATTLE then
+			UseCooldown(DefensiveStance)
+		elseif BerserkerStance:Usable() and Player.preferred_stance == STANCE.BERSERKER then
+			UseCooldown(BerserkerStance)
+		end
+	end
 	if Devastate:Usable() and (
 		Player.rage.current >= (self.rage_pool_amount + Devastate:Cost()) or
 		(SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5)
@@ -2151,10 +2189,10 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 end
 
 APL[STANCE.BERSERKER].Main = function(self)
-	self.rage_pool_amount = max(10,
+	self.rage_pool_amount = max(Player:InPreferredStance() and 10 or 0,
 		(MortalStrike.known and MortalStrike:Ready(Player.gcd * 3) and MortalStrike:Cost() or 0) +
 		(Bloodthirst.known and Bloodthirst:Ready(Player.gcd * 3) and Bloodthirst:Cost() or 0) +
-		(ShieldSlam.known and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
+		(ShieldSlam.known and ShieldSlam:Available() and ShieldSlam:Ready(Player.gcd * 3) and ShieldSlam:Cost() or 0) +
 		(Whirlwind.known and Whirlwind:Ready(Player.gcd * 3) and Whirlwind:Cost() or 0) +
 		(SweepingStrikes.known and Player.enemies > 1 and SweepingStrikes:Ready(Player.gcd * 3) and SweepingStrikes:Cost() or 0) +
 		(AngerManagement.known and -1 or 0) +
@@ -2164,7 +2202,7 @@ APL[STANCE.BERSERKER].Main = function(self)
 	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(self.rage_pool_amount, Target.boss and 180 or 30)
-		if apl then return apl end
+		if apl then UseCooldown(apl) end
 		if Intercept:Usable() then
 			return Intercept
 		end
@@ -2175,7 +2213,11 @@ APL[STANCE.BERSERKER].Main = function(self)
 		local apl = APL:Buffs(self.rage_pool_amount, 10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (Player.enemies == 1 or not Whirlwind:Usable() or Player.rage.current > (Slam:Cost() + Whirlwind:Cost())) then
+	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (
+		Player.enemies < 2 or
+		not Whirlwind:Usable() or
+		Player.rage.current > (Slam:Cost() + Whirlwind:Cost())
+	) then
 		return Slam
 	end
 	APL:Cooldowns(self.rage_pool_amount)
@@ -2209,7 +2251,7 @@ APL[STANCE.BERSERKER].Main = function(self)
 		if Rampage:Usable() and Rampage.buff:Remains() < 5 then
 			return Rampage
 		end
-		if Execute:Usable() and (Player.equipped.offhand or Recklessness:Up() or (SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(3)))) then
+		if Execute:Usable() and (Player.equipped.offhand or Recklessness:Up() or (SweepingStrikes:Up() and (not Whirlwind.known or not Whirlwind:Ready(Player.gcd * 2)))) then
 			return Execute
 		end
 	elseif not Slam.wait then
@@ -2241,22 +2283,26 @@ APL[STANCE.BERSERKER].Main = function(self)
 	if VictoryRush:Usable() and not Slam.wait then
 		return VictoryRush
 	end
-	if Slam.use and Slam:Usable() and Player.enemies == 1 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
+	if Slam.use and Slam:Usable() and Player.enemies < 2 and Player.swing.mh.remains > Opt.slam_min_speed and Player.rage.current >= 90 then
 		return Slam
 	end
-	if BattleStance:Usable() and Player.rage.current < self.rage_pool_amount and Overpower:React() > 2 then
-		UseCooldown(BattleStance)
+	if Player.rage.current <= (TacticalMastery:RageRetain() + 5) then
+		if BattleStance:Usable() and (Player.preferred_stance == STANCE.BATTLE or Overpower:React() > Player.gcd) then
+			UseCooldown(BattleStance)
+		elseif DefensiveStance:Usable() and Player.preferred_stance == STANCE.DEFENSIVE then
+			UseCooldown(DefensiveStance)
+		end
 	end
 	return APL:Struggle(self.rage_pool_amount)
 end
 
 APL.Cooldowns = function(self, pool)
-	if Bloodrage:Usable() and Player.rage.current < pool and Player.health.pct >= (50 + (Player:UnderAttack() and 25 or 0)) and not (Player:UnderAttack() and BerserkerRage:Up()) then
+	if Bloodrage:Usable() and Player:InPreferredStance() and Player.rage.current < pool and Player.health.pct >= (50 + (Player:UnderAttack() and 25 or 0)) and not (Player:UnderAttack() and BerserkerRage:Up()) then
 		UseCooldown(Bloodrage)
 	end
 	if DeathWish:Usable() and not Slam.wait and (
 		(Recklessness.known and Recklessness:Up()) or (
-			Player.rage.current >= (pool + DeathWish:Cost()) and (
+			Player.rage.current >= pool and Player:InPreferredStance() and (
 				not Target.boss or
 				(Player:TimeInCombat() > 10 and (Target.health.pct < 20 or Target.timeToDie < 35 or Target.timeToDie > DeathWish:CooldownDuration() + 40))
 			)
@@ -2264,10 +2310,16 @@ APL.Cooldowns = function(self, pool)
 	) then
 		UseCooldown(DeathWish)
 	end
-	if BloodFury:Usable() and Player.health.pct >= (50 + (Player:UnderAttack() and 25 or 0)) then
+	if BloodFury:Usable() and Player:InPreferredStance() and Player.health.pct >= (50 + (Player:UnderAttack() and 25 or 0)) then
 		UseCooldown(BloodFury)
 	end
-	if Recklessness:Usable() and Target.boss and (Target.health.pct < 20 or Target.timeToDie < 25) and (not Rampage.known or Rampage.buff:Remains() > 8) and (Player.enemies == 1 or not SweepingStrikes.known or SweepingStrikes:Ready(Player.gcd) or SweepingStrikes:Remains() > 8) and (not DeathWish.known or DeathWish:Up() or Target.timeToDie < DeathWish:Cooldown() + 20) then
+	if Recklessness:Usable() and Target.boss and (Target.health.pct < 20 or Target.timeToDie < 25) and (not Rampage.known or Rampage.buff:Remains() > 8) and (
+		(Player:InPreferredStance() and (Player.enemies < 2 or not SweepingStrikes.known or SweepingStrikes:Ready(2))) or
+		SweepingStrikes:Remains() > 8
+	) and (
+		(Player:InPreferredStance() and (not DeathWish.known or Target.timeToDie < DeathWish:Cooldown() + 20)) or
+		DeathWish:Remains() > 8
+	) then
 		UseExtra(Recklessness)
 	end
 end
@@ -2334,12 +2386,6 @@ APL.Struggle = function(self, pool)
 end
 
 APL.Interrupt = function(self)
-	if Pummel:Usable() and Player.stance == STANCE.BERSERKER then
-		return Pummel
-	end
-	if ShieldBash:Usable() and (Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE) then
-		return ShieldBash
-	end
 	if Pummel:Usable() then
 		return Pummel
 	end
@@ -3340,6 +3386,26 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		end
 		return Status('Show on-use trinkets in cooldown UI', Opt.trinket)
 	end
+	if startsWith(msg[1], 'st') or startsWith(msg[1], 'pr') then
+		if msg[2] then
+			if startsWith(msg[2], 'ba') then
+				Opt.preferred_stance = STANCE.BATTLE
+			elseif startsWith(msg[2], 'd') then
+				Opt.preferred_stance = STANCE.DEFENSIVE
+			elseif startsWith(msg[2], 'be') then
+				Opt.preferred_stance = STANCE.BERSERKER
+			else
+				Opt.preferred_stance = false
+			end
+			Player:UpdateKnown()
+		end
+		return Status('Preferred stance to use (default is auto, based on spells known)',
+			(Opt.preferred_stance == STANCE.BATTLE and BattleStance.name) or
+			(Opt.preferred_stance == STANCE.DEFENSIVE and DefensiveStance.name) or
+			(Opt.preferred_stance == STANCE.BERSERKER and BerserkerStance.name) or
+			'Auto'
+		)
+	end
 	if startsWith(msg[1], 'sw') then
 		if msg[2] then
 			Opt.swing_timer = msg[2] == 'on'
@@ -3390,6 +3456,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		'ttl |cFFFFD000[seconds]|r - time target exists in auto AoE after being hit (default is 10 seconds)',
 		'ttd |cFFFFD000[seconds]|r - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
+		'stance |cFFFFD000battle|r/|cFFFFD000defensive|r/|cFFFFD000berserker|r - preferred stance to use (default is auto)',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
 		'swing |cFF00C000on|r/|cFFC00000off|r - show time remaining until next melee swing (top-left)',
 		'cshout |cFF00C000on|r/|cFFC00000off|r - use Commanding Shout if another warrior uses Battle Shout',

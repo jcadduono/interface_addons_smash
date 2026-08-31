@@ -1084,6 +1084,7 @@ Whirlwind:AutoAoe(false)
 local Bloodthirst = Ability:Add({23881, 23892, 23893, 23894, 25251, 30335}, false, true)
 Bloodthirst.rage_cost = 30
 Bloodthirst.cooldown_duration = 6
+local ImprovedDemoralizingShout = Ability:Add({12324, 12876, 12877, 12878, 12879}, false, true)
 local ImprovedExecute = Ability:Add({20502, 20503}, false, true)
 local ImprovedSlam = Ability:Add({12862, 12330}, false, true)
 local Rampage = Ability:Add({29801, 30030, 30033}, true, true)
@@ -2347,9 +2348,14 @@ APL.Buffs = function(self, pool, remains)
 		self.ds_mine = DemoralizingShout:Remains(true)
 		self.ds_remains = self.ds_mine > 0 and self.ds_mine or max(DemoralizingShout:Remains(), DemoralizingRoar:Remains(), CurseOfWeakness:Remains())
 		self.ds_mine = self.ds_mine > 0
-		if DemoralizingShout:Usable() and Player.rage.current >= (pool + DemoralizingShout:Cost()) and (
-			(self.ds_remains == 0 and (Player.equipped.shield or Player.stance == STANCE.DEFENSIVE or Player:UnderMeleeAttack())) or
-			(self.ds_mine and self.ds_remains < 5)
+		if DemoralizingShout:Usable() and (
+			(self.ds_remains == 0 and Target.level >= (Player.level - 1) and (
+				Player.equipped.shield or
+				Player.stance == STANCE.DEFENSIVE or
+				Player:UnderMeleeAttack() or
+				(ImprovedDemoralizingShout.known and Player.rage.current >= (pool + DemoralizingShout:Cost()))
+			)) or
+			(self.ds_mine and self.ds_remains < 5 and Player.rage.current >= (pool + DemoralizingShout:Cost()))
 		) then
 			return DemoralizingShout
 		end

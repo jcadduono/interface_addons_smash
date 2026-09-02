@@ -290,6 +290,7 @@ local Player = {
 		last_taken_physical = 0,
 	},
 	equipped = {
+		onehand = false,
 		twohand = false,
 		offhand = false,
 		shield = false,
@@ -1924,6 +1925,10 @@ function Charge:Available()
 	return Player.stance == STANCE.BATTLE and Player:TimeInCombat() == 0
 end
 
+function Devastate:Available()
+	return Player.equipped.onehand
+end
+
 function Rend:Available()
 	return (
 		(Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE) and
@@ -2149,7 +2154,7 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	if Revenge:Usable() and Revenge:React() < Player.gcd then
 		return Revenge
 	end
-	if Devastate:Usable(0, true) and SunderArmor:Stack() >= 3 and SunderArmor:Remains() < (Player.gcd * 2) then
+	if Devastate:Usable(0, true) and SunderArmor:Up(true) and SunderArmor:Remains() < (Player.gcd * 2) then
 		return Pool(Devastate)
 	end
 	if ImprovedThunderClap.known and ThunderClap:Usable(0, true) and ThunderClap:Remains() < (Player.gcd * 2) then
@@ -2185,12 +2190,6 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 		elseif BerserkerStance:Usable() and Player.preferred_stance == STANCE.BERSERKER then
 			UseCooldown(BerserkerStance)
 		end
-	end
-	if Devastate:Usable() and (
-		Player.rage.current >= (self.rage_pool_amount + Devastate:Cost()) or
-		(SunderArmor:Stack() >= 3 and SunderArmor:Remains() < 5)
-	) then
-		return Devastate
 	end
 	return APL:Struggle(self.rage_pool_amount)
 end
@@ -2372,20 +2371,31 @@ APL.Buffs = function(self, pool, remains)
 end
 
 APL.Struggle = function(self, pool)
+	if Devastate:Usable() and (
+		Player.rage.current >= (pool + Devastate:Cost()) or
+		(ExposeArmor:Down() and (not SunderArmor:Capped() or SunderArmor:Remains() < min(5, Target.timeToDie)))
+	) then
+		return Devastate
+	end
 	if ThunderClap:Usable() and Player.rage.current >= (pool + ThunderClap:Cost()) and (
 		(ImprovedThunderClap.rank >= 3 and (Player.enemies >= (2 + (Cleave.known and 1 or 0)) or (Player:UnderMeleeAttack() and ThunderClap:Remains() < 2))) or
 		(Player.enemies >= (4 - (ImprovedThunderClap.rank >= 3 and 2 or 0)) and Player.rage.current >= (pool + ThunderClap:Cost() + (Cleave.known and Cleave:Cost() or 0)))
 	) then
 		return ThunderClap
 	end
-	if not Devastate.known and SunderArmor:Usable() and ((SunderArmor:Stack() >= 3 and SunderArmor:Remains() < min(5, Target.timeToDie)) or (Target.timeToDie > 18 and Player.rage.current >= (pool + SunderArmor:Cost()) and not SunderArmor:Capped())) then
-		return SunderArmor
-	end
-	if FieryWeapon.known and Hamstring:Usable() and Player.rage.current >= (pool + Hamstring:Cost()) and (not Cleave.known or Player.enemies < 2) and (HeroicStrike.rank < 5 or Player.rage.deficit <= 15) then
-		return Hamstring
-	end
-	if ImprovedRend.known and Rend:Usable() and (not Cleave.known or Player.enemies < 2) and Rend:Down() and Player.rage.current >= (pool + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then
-		return Rend
+	if not (Devastate.known and Devastate:Available()) then
+		if SunderArmor:Usable() and (
+			(SunderArmor:Stack() >= 3 and SunderArmor:Remains() < min(5, Target.timeToDie)) or
+			(Target.timeToDie > 18 and Player.rage.current >= (pool + SunderArmor:Cost()) and not SunderArmor:Capped() and ExposeArmor:Down())
+		) then
+			return SunderArmor
+		end
+		if ImprovedRend.known and Rend:Usable() and (not Cleave.known or Player.enemies < 2) and Rend:Down() and Player.rage.current >= (pool + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then
+			return Rend
+		end
+		if FieryWeapon.known and Hamstring:Usable() and Player.rage.current >= (pool + Hamstring:Cost()) and (not Cleave.known or Player.enemies < 2) and (HeroicStrike.rank < 5 or Player.rage.deficit <= 15) then
+			return Hamstring
+		end
 	end
 	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (pool + Cleave:Cost()) then
 		UseCooldown(Cleave)
@@ -3043,6 +3053,7 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 	end
 
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 16) or 0)
+	Player.equipped.onehand = equipType == 'INVTYPE_WEAPON'
 	Player.equipped.twohand = equipType == 'INVTYPE_2HWEAPON'
 	_, _, _, _, _, _, _, _, equipType = GetItemInfo(GetInventoryItemID('player', 17) or 0)
 	Player.equipped.offhand = equipType == 'INVTYPE_WEAPON'

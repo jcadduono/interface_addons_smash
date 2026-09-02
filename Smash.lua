@@ -2354,7 +2354,7 @@ APL.Buffs = function(self, pool, remains)
 		self.ds_remains = self.ds_mine > 0 and self.ds_mine or max(DemoralizingShout:Remains(), DemoralizingRoar:Remains(), CurseOfWeakness:Remains())
 		self.ds_mine = self.ds_mine > 0
 		if DemoralizingShout:Usable() and (
-			(self.ds_remains == 0 and Target.level >= (Player.level - 1) and (
+			(self.ds_remains == 0 and Target.level >= (Player.level - Player.enemies - 2) and (
 				Player.equipped.shield or
 				Player.stance == STANCE.DEFENSIVE or
 				Player:UnderMeleeAttack() or

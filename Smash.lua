@@ -2131,7 +2131,7 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	if ShieldBlock:Usable() and Player.rage.current >= (self.rage_pool_amount + ShieldBlock:Cost()) and Player:UnderMeleeAttack(true) and ShieldBlock:Down() then
 		UseCooldown(ShieldBlock)
 	end
-	if Taunt:Usable() and Player.threat.status < 3 and UnitAffectingCombat('target') then
+	if Taunt:Usable() and Player.threat.status < 3 and UnitAffectingCombat('target') and Player:TimeInCombat() > 2 then
 		UseCooldown(Taunt)
 	end
 	APL:Cooldowns(self.rage_pool_amount)
@@ -2148,6 +2148,12 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	end
 	if Revenge:Usable() and Revenge:React() < Player.gcd then
 		return Revenge
+	end
+	if Devastate:Usable(0, true) and SunderArmor:Stack() >= 3 and SunderArmor:Remains() < (Player.gcd * 2) then
+		return Pool(Devastate)
+	end
+	if ImprovedThunderClap.known and ThunderClap:Usable(0, true) and ThunderClap:Remains() < (Player.gcd * 2) then
+		return Pool(ThunderClap)
 	end
 	if ShieldSlam:Usable() then
 		return ShieldSlam
@@ -2375,7 +2381,7 @@ APL.Struggle = function(self, pool)
 	if not Devastate.known and SunderArmor:Usable() and ((SunderArmor:Stack() >= 3 and SunderArmor:Remains() < min(5, Target.timeToDie)) or (Target.timeToDie > 18 and Player.rage.current >= (pool + SunderArmor:Cost()) and not SunderArmor:Capped())) then
 		return SunderArmor
 	end
-	if FieryWeapon.known and Hamstring:Usable() and Player.rage.current >= (pool + Hamstring:Cost()) then
+	if FieryWeapon.known and Hamstring:Usable() and Player.rage.current >= (pool + Hamstring:Cost()) and (not Cleave.known or Player.enemies < 2) and (HeroicStrike.rank < 5 or Player.rage.deficit <= 15) then
 		return Hamstring
 	end
 	if ImprovedRend.known and Rend:Usable() and (not Cleave.known or Player.enemies < 2) and Rend:Down() and Player.rage.current >= (pool + Rend:Cost()) and Target.timeToDie > (Rend:TickTime() * 3) then

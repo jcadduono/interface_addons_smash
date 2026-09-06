@@ -1019,6 +1019,7 @@ ThunderClap.buff_duration = 10
 ThunderClap.cooldown_duration = 4
 ThunderClap.rage_cost = 20
 ThunderClap:AutoAoe(false)
+ThunderClap:Track()
 ------ Talents
 local AngerManagement = Ability:Add({12296}, true, true)
 AngerManagement.tick_interval = 3
@@ -1149,6 +1150,8 @@ local CurseOfWeakness = Ability:Add({702, 1108, 6205, 7646, 11707, 11708, 27224,
 local DemoralizingRoar = Ability:Add({99, 1735, 9490, 9747, 9898, 26998}) -- Applied by Druids, AP reduction
 local DemoralizingShout = Ability:Add({1160, 6190, 11554, 11555, 11556, 25202, 25203}) -- Applied by Warriors, AP reduction, doesn't stack with Demoralizing Roar/Curse of Weakness
 DemoralizingShout.rage_cost = 10
+DemoralizingShout.buff_duration = 30
+DemoralizingShout:Track()
 local ExposeArmor = Ability:Add({8647, 8649, 8650, 11197, 11198, 26866}) -- Applied by Rogues, armor reduction
 local SunderArmor = Ability:Add({7386, 7405, 8380, 11596, 11597, 25225}) -- Applied by Warriors, armor reduction, doesn't stack with Expose Armor
 SunderArmor.buff_duration = 30
@@ -1875,6 +1878,10 @@ function ThunderClap:Cost()
 	return max(0, cost)
 end
 
+function ThunderClap:Duration()
+	return 10 + (4 * min(5, self.rank - 1))
+end
+
 function ThunderClap:Available()
 	return Player.stance == STANCE.BATTLE or Player.stance == STANCE.DEFENSIVE
 end
@@ -2157,7 +2164,10 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	if Devastate:Usable(0, true) and SunderArmor:Up(true) and SunderArmor:Remains() < (Player.gcd * 2) then
 		return Pool(Devastate)
 	end
-	if ImprovedThunderClap.known and ThunderClap:Usable(0, true) and ThunderClap:Remains() < (Player.gcd * 2) then
+	if ImprovedThunderClap.known and ThunderClap:Usable(0, true) and (
+		ThunderClap:Remains() < (Player.gcd * 2) or
+		ThunderClap:Ticking() < Player.enemies
+	) then
 		return Pool(ThunderClap)
 	end
 	if ShieldSlam:Usable() then
@@ -2360,7 +2370,7 @@ APL.Buffs = function(self, pool, remains)
 				Player:UnderMeleeAttack() or
 				(ImprovedDemoralizingShout.known and Player.rage.current >= (pool + DemoralizingShout:Cost()))
 			)) or
-			(self.ds_mine and self.ds_remains < 5 and Player.rage.current >= (pool + DemoralizingShout:Cost()))
+			(self.ds_mine and (self.ds_remains < 5 or DemoralizingShout:Ticking() < Player.enemies) and Player.rage.current >= (pool + DemoralizingShout:Cost()))
 		) then
 			return DemoralizingShout
 		end

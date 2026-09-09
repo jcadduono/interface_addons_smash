@@ -288,6 +288,7 @@ local Player = {
 		paused = false,
 		last_taken = 0,
 		last_taken_physical = 0,
+		abilities_used = {},
 	},
 	equipped = {
 		onehand = false,
@@ -803,6 +804,10 @@ function Ability:UsedWithin(seconds)
 	return self.last_used >= (Player.time - seconds)
 end
 
+function Ability:UsedInSwing()
+	return Player.swing.abilities_used[self] or self:Casting()
+end
+
 function Ability:AutoAoe(removeUnaffected, trigger)
 	self.auto_aoe = {
 		remove = removeUnaffected,
@@ -857,6 +862,7 @@ function Ability:CastSuccess(dstGUID)
 		return
 	end
 	Player.last_ability = self
+	Player.swing.abilities_used[self] = true
 	if self.triggers_gcd then
 		Player.previous_gcd[10] = nil
 		table.insert(Player.previous_gcd, 1, self)
@@ -887,7 +893,10 @@ function Ability:CastSuccess(dstGUID)
 end
 
 function Ability:CastLanded(dstGUID, event, missType)
-	if self.swing_queue then
+	if self.resets_swing then
+		Player:ResetSwing(true, true, event == 'SPELL_MISSED', false)
+		Player.swing.abilities_used[self] = true
+	elseif self.swing_queue then
 		Player:ResetSwing(true, false, event == 'SPELL_MISSED', false)
 	end
 	if self.traveling then
@@ -1073,6 +1082,7 @@ Recklessness.buff_duration = 15
 Recklessness.cooldown_duration = 1800
 local Slam = Ability:Add({1464, 8820, 11604, 11605, 25241, 25242}, false, true)
 Slam.rage_cost = 15
+Slam.resets_swing = true
 local VictoryRush = Ability:Add({34428}, true, true)
 VictoryRush.buff_duration = 20
 VictoryRush.activated = false
@@ -1463,13 +1473,14 @@ function Player:ResetSwing(mainHand, offHand, missed, pause)
 		if Opt.swing_timer then
 			smashPanel.text.tl:SetTextColor(1, missed and 0 or 1, missed and 0 or 1, 1)
 		end
+		wipe(self.swing.abilities_used)
 	end
 	if offHand then
 		self.swing.oh.speed = (oh or 0)
 		self.swing.oh.last = self.time
 		self.swing.oh.next = self.time + self.swing.oh.speed
 	end
-	Player.swing.paused = not not pause
+	self.swing.paused = not not pause
 end
 
 function Player:Equipped(itemID, slot)
@@ -1977,16 +1988,6 @@ function SweepingStrikes:Available()
 	return Player.stance == STANCE.BATTLE or Player.stance == STANCE.BERSERKER
 end
 
-function Slam:CastLanded(dstGUID, event)
-	Ability.CastLanded(self, dstGUID, event)
-	Player:ResetSwing(true, true, event == 'SPELL_MISSED', false)
-	self.used_this_swing = true
-end
-
-function Slam:FirstInSwing()
-	return not (self.used_this_swing or self:Casting())
-end
-
 function ShieldBlock:Available()
 	return Player.stance == STANCE.DEFENSIVE and Player.equipped.shield
 end
@@ -2045,7 +2046,7 @@ APL[STANCE.BATTLE].Main = function(self)
 		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
 		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
 	)
-	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > (Player.swing.mh.remains + Player.gcd + 0.5)
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(self.rage_pool_amount, Target.boss and 180 or 30)
 		if apl then UseCooldown(apl) end
@@ -2056,14 +2057,13 @@ APL[STANCE.BATTLE].Main = function(self)
 		local apl = APL:Buffs(self.rage_pool_amount, 10)
 		if apl then UseExtra(apl) end
 	end
-	if Overpower:Usable() then
+	if Overpower:Usable() and Overpower:React() < Player.gcd then
 		return Overpower
 	end
-	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (
-		Player.enemies < 2 or
-		not Whirlwind:Usable() or
-		Player.rage.current > (Slam:Cost() + Whirlwind:Cost())
-	) then
+	if VictoryRush:Usable() and VictoryRush:React() < Player.gcd then
+		return VictoryRush
+	end
+	if Slam.use and Slam:Usable() and not Slam:UsedInSwing() and Player.swing.mh.remains > Opt.slam_min_speed then
 		return Slam
 	end
 	APL:Cooldowns(self.rage_pool_amount)
@@ -2078,8 +2078,12 @@ APL[STANCE.BATTLE].Main = function(self)
 	elseif HeroicStrike:Usable() and (not Cleave.known or Player.enemies < 2) and Player.rage.current >= (30 + self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
 		UseCooldown(HeroicStrike)
 	end
-	if VictoryRush:Usable() and VictoryRush:Remains() < Player.gcd then
-		return VictoryRush
+	if Overpower:Usable() and (
+		not Slam.use or
+		not Slam.wait or
+		Overpower:React() < (Player.swing.mh.remains + Player.gcd + 0.5)
+	) then
+		return Overpower
 	end
 	if not Slam.wait then
 		if Bloodthirst:Usable() and (Player.equipped.twohand or not Execute:Usable()) then
@@ -2145,6 +2149,9 @@ APL[STANCE.DEFENSIVE].Main = function(self)
 	end
 	if Taunt:Usable() and Player.threat.status < 3 and UnitAffectingCombat('target') and Player:TimeInCombat() > 2 then
 		UseCooldown(Taunt)
+	end
+	if Slam.use and Slam:Usable() and not Slam:UsedInSwing() and Player.swing.mh.remains > Opt.slam_min_speed then
+		return Slam
 	end
 	APL:Cooldowns(self.rage_pool_amount)
 	if Player.enemies > 1 and Cleave:Usable() and Player.rage.current >= (20 + self.rage_pool_amount + Cleave:Cost()) then
@@ -2215,7 +2222,7 @@ APL[STANCE.BERSERKER].Main = function(self)
 		(Bloodrage.known and Bloodrage.buff:Up() and -1 or 0) +
 		(SecondWind.known and SecondWind.buff:Up() and (-2 * SecondWind.rank) or 0)
 	)
-	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > 2
+	Slam.wait = Slam.use and Player.swing.mh.remains < Opt.slam_cutoff and Player.swing.mh.speed > Opt.slam_min_speed and Player.rage.current < 75 and Target.timeToDie > (Player.swing.mh.remains + Player.gcd + 0.5)
 	if Player:TimeInCombat() == 0 then
 		local apl = APL:Buffs(self.rage_pool_amount, Target.boss and 180 or 30)
 		if apl then UseCooldown(apl) end
@@ -2229,7 +2236,10 @@ APL[STANCE.BERSERKER].Main = function(self)
 		local apl = APL:Buffs(self.rage_pool_amount, 10)
 		if apl then UseExtra(apl) end
 	end
-	if Slam.use and Slam:Usable() and Slam:FirstInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (
+	if VictoryRush:Usable() and VictoryRush:React() < Player.gcd then
+		return VictoryRush
+	end
+	if Slam.use and Slam:Usable() and not Slam:UsedInSwing() and Player.swing.mh.remains > Opt.slam_min_speed and (
 		Player.enemies < 2 or
 		not Whirlwind:Usable() or
 		Player.rage.current > (Slam:Cost() + Whirlwind:Cost())
@@ -2247,9 +2257,6 @@ APL[STANCE.BERSERKER].Main = function(self)
 		UseCooldown(Cleave)
 	elseif HeroicStrike:Usable() and (not Cleave.known or Player.enemies < 2) and Player.rage.current >= (30 + self.rage_pool_amount + HeroicStrike:Cost()) and not Execute:Usable() then
 		UseCooldown(HeroicStrike)
-	end
-	if VictoryRush:Usable() and VictoryRush:React() < Player.gcd then
-		return VictoryRush
 	end
 	if Player.enemies > 1 and not Slam.wait then
 		if Whirlwind:Usable() and (not SweepingStrikes.known or not SweepingStrikes:Ready(2) or Player.rage.current >= (SweepingStrikes:Cost() + Whirlwind:Cost())) then
